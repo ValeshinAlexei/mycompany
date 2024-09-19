@@ -1,24 +1,24 @@
 MODULE TimeEntryExtensions;
 
-REQUIRE TimeEntry, Project, ProjectTimeEntry, TimeEntryHours, ItemSales, Employee;
+REQUIRE TimeEntry, Project, ProjectTimeEntry, TimeEntryHours, ItemSales, Employee, Category, ItemCost;
 
 NAMESPACE ProjectManagement;
 
-// Добавляем новые поля для процентов и дополнительных сотрудников
+// Добавляем поля для процентов и дополнительных сотрудников
 percent 'Процент' = DATA NUMERIC[5,2] (TimeEntry);
 employee2 'Сотрудник 2' = DATA Employee (TimeEntry);
-percent2 'Процент 2' = DATA NUMERIC[5,2] (TimeEntry);
+percent2 'Процент 2' = DATA NUMERIC[5,2] (TimeEntry) NONULL;
 employee3 'Сотрудник 3' = DATA Employee (TimeEntry);
-percent3 'Процент 3' = DATA NUMERIC[5,2] (TimeEntry);
+percent3 'Процент 3' = DATA NUMERIC[5,2] (TimeEntry) NONULL;
 employee4 'Сотрудник 4' = DATA Employee (TimeEntry);
-percent4 'Процент 4' = DATA NUMERIC[5,2] (TimeEntry);
+percent4 'Процент 4' = DATA NUMERIC[5,2] (TimeEntry) NONULL;
 
-// Определяем уникальные имена для дополнительных сотрудников
+// Уникальные имена для дополнительных сотрудников
 nameEmployee2 'Сотрудник 2' (TimeEntry t) = MasterData.name(employee2(t));
 nameEmployee3 'Сотрудник 3' (TimeEntry t) = MasterData.name(employee3(t));
 nameEmployee4 'Сотрудник 4' (TimeEntry t) = MasterData.name(employee4(t));
 
-// Создаем новое поле descriptionText типа TEXT
+// Поле descriptionText
 descriptionText 'Описание' = DATA TEXT (TimeEntry);
 
 // Новый класс для строк отметки времени
@@ -29,47 +29,82 @@ timeEntry = DATA TimeEntry (TimeEntryLine) NONULL DELETE;
 
 // Вид работ (номенклатура)
 workType 'Вид работ' = DATA Item (TimeEntryLine) NONULL;
-nameWorkType 'Вид работ' (TimeEntryLine l) = name(workType(l));
+nameWorkType 'Вид работ' (TimeEntryLine l) = MasterData.name(workType(l));
 
-// Количество часов
-hours 'Количество часов' = DATA NUMERIC[16,3] (TimeEntryLine);
-
-// Количество (например, количество единиц работы, выполненной за это время)
+// Количество (например, количество единиц работы)
 quantity 'Количество' = DATA NUMERIC[16,3] (TimeEntryLine);
 
-// Определение свойства salesQuantity для номенклатуры
-salesQuantity 'Доступное количество для продажи' (Item i) = DATA NUMERIC[16,3] (Item);
+// Цена за единицу работы (подтягивается из себестоимости)
+price 'Цена' = DATA NUMERIC[10,2] (TimeEntryLine);
 
-// Автоматическое заполнение количества, если требуется
-defaultWorkQuantity = ABSTRACT CASE NUMERIC[16,3] (TimeEntryLine);
-WHEN LOCAL SETCHANGED(workType(TimeEntryLine l)) AND NOT CHANGED(quantity(l)) DO quantity(l) <- defaultWorkQuantity(l);
+// Общая стоимость строки (количество * цена)
+totalCost 'Общая стоимость' (TimeEntryLine l) = quantity(l) * price(l);
 
-// Использование свойства salesQuantity для автозаполнения
-defaultWorkQuantity(TimeEntryLine l) += WHEN salesQuantity(workType(l)) THEN salesQuantity(workType(l));
+// Логика для присвоения плановой себестоимости
+defaultPrice 'Цена по умолчанию' (TimeEntryLine l) =
+    CASE
+        WHEN cost(workType(l), currentDate()) THEN cost(workType(l), currentDate())  // Если себестоимость указана, используем её
+        ELSE 100;  // Цена по умолчанию для всех остальных видов работ
 
-// Создание свойства для суммирования часов по строкам номенклатуры
-totalHours 'Суммарное количество часов' (TimeEntry t) =
-    GROUP SUM hours(TimeEntryLine l) IF timeEntry(l) = t;
+// Присваиваем себестоимость по умолчанию при выборе вида работ
+WHEN LOCAL SETCHANGED(workType(TimeEntryLine l)) AND NOT CHANGED(price(l)) DO
+    price(l) <- defaultPrice(l);
 
-// Использование инструкции <- WHEN для записи суммы часов в основное свойство
+// Общая сумма по всем позициям (Итого ФОТ)
+totalWage 'Итого ФОТ' (TimeEntry t) = GROUP SUM totalCost(TimeEntryLine l) BY timeEntry(l);
+
+// Проверка на уникальность сотрудников в записи времени
+CONSTRAINT
+    employee2(t) = employee(t) OR
+        employee3(t) = employee(t) OR employee3(t) = employee2(t) OR
+        employee4(t) = employee(t) OR employee4(t) = employee2(t) OR employee4(t) = employee3(t)
+    MESSAGE 'Сотрудники не могут быть одинаковыми в одной записи времени';
+
+// Проверка: сумма процентов сотрудников 2, 3 и 4 не должна превышать 100%
+CONSTRAINT percent2(t) + percent3(t) + percent4(t) > 100
+    MESSAGE 'Сумма процентов для сотрудников 2, 3 и 4 не может превышать 100%';
+
+// Процент для первого сотрудника. Если поля сотрудников 2, 3 или 4 изменяются, процент обновляется.
+percent(t) <- 100 - (percent2(t) + percent3(t) + percent4(t))
+    WHEN NOT (percent2(t) == NULL OR percent3(t) == NULL OR percent4(t) == NULL)
+    AND (CHANGED(percent2(t)) OR CHANGED(percent3(t)) OR CHANGED(percent4(t)));
+
+// Удаляем логику автоматического суммирования и делаем поле totalHours редактируемым
+totalHours 'Часов' = DATA NUMERIC[16,3] (TimeEntry);
+// Присваиваем время старому свойству
 hours(TimeEntry t) <- totalHours(t) WHEN CHANGED(totalHours(t));
 
-// Расширяем форму timeEntry для добавления новых полей и строк номенклатуры
+// Инициализация процентов сотрудников 2, 3, 4 при создании новой записи
+percent2(TimeEntry t) <- 0 WHEN SET(t IS TimeEntry);
+percent3(TimeEntry t) <- 0 WHEN SET(t IS TimeEntry);
+percent4(TimeEntry t) <- 0 WHEN SET(t IS TimeEntry);
+
+// Поле для хранения сотрудника, который является "Бригадиром"
+brigadier 'Бригадир' = DATA Employee (TimeEntry);
+
+// Автоматическое назначение бригадира: бригадир всегда равен первому сотруднику
+brigadier(TimeEntry t) <- employee(t) WHEN CHANGED(employee(t));
+
+// Вычисляемое свойство для отображения имени бригадира
+nameBrigadier 'Бригадир' (TimeEntry t) = MasterData.name(brigadier(t));
+
+// Формы
 EXTEND FORM timeEntry
-    PROPERTIES(t) percent, nameEmployee2, percent2, nameEmployee3, percent3, nameEmployee4, percent4, descriptionText, totalHours
+    PROPERTIES(t) percent, nameEmployee2, percent2, nameEmployee3, percent3, nameEmployee4, percent4, descriptionText, totalHours, nameBrigadier READONLY, totalWage // Убрано дублирование поля project
     OBJECTS l = TimeEntryLine
-    PROPERTIES(l) nameWorkType, hours, quantity
+    PROPERTIES(l) nameWorkType, quantity, price, totalCost // Добавили себестоимость и общую стоимость
     PROPERTIES(l) NEW, DELETE
     FILTERS timeEntry(l) = t;
 
+// Оформление формы
 DESIGN timeEntry {
     OBJECTS {
         MOVE pane {
-            REMOVE PROPERTY(hours(t));  // Удаляем старое свойство "Часов" с формы
-            REMOVE PROPERTY(nameTimeEntryHours(t));  // Удаляем поле "Шаблон"
-            REMOVE PROPERTY(description(t));  // Удаляем старое поле с описанием
+            REMOVE PROPERTY(hours(t));
+            REMOVE PROPERTY(nameTimeEntryHours(t));
+            REMOVE PROPERTY(description(t));
 
-            // Строка с первым сотрудником и процентом
+            // Сотрудник 1 и процент
             NEW employeeAndPercentPane1 {
                 horizontal = TRUE;
                 alignment = STRETCH;
@@ -77,6 +112,7 @@ DESIGN timeEntry {
                     captionWidth = 100;
                     valueWidth = 145;
                     alignment = START;
+                    caption = IF brigadier(t) = employee(t) THEN 'Бригадир' ELSE 'Сотрудник 1'; // Отображаем "Бригадир", если сотрудник создатель
                 }
                 MOVE PROPERTY(percent(t)) {
                     caption = '%';
@@ -86,7 +122,7 @@ DESIGN timeEntry {
                 }
             }
 
-            // Строка с сотрудником 2 и процентом 2
+            // Сотрудник 2 и процент
             NEW employeeAndPercentPane2 {
                 horizontal = TRUE;
                 alignment = STRETCH;
@@ -103,7 +139,7 @@ DESIGN timeEntry {
                 }
             }
 
-            // Строка с сотрудником 3 и процентом 3
+            // Сотрудник 3 и процент
             NEW employeeAndPercentPane3 {
                 horizontal = TRUE;
                 alignment = STRETCH;
@@ -120,7 +156,7 @@ DESIGN timeEntry {
                 }
             }
 
-            // Строка с сотрудником 4 и процентом 4
+            // Сотрудник 4 и процент
             NEW employeeAndPercentPane4 {
                 horizontal = TRUE;
                 alignment = STRETCH;
@@ -137,30 +173,19 @@ DESIGN timeEntry {
                 }
             }
 
-            // Строка с проектом
-            NEW projectPane {
-                horizontal = TRUE;
-                alignment = STRETCH;
-                MOVE PROPERTY(nameProject(t)) {
-                    captionWidth = 100;
-                    valueWidth = 150;
-                    alignment = START;
-                }
-            }
-
-            // Строка с суммарными часами
+            // Суммарные часы теперь доступны для ввода пользователем
             NEW hoursPane {
                 horizontal = TRUE;
                 alignment = STRETCH;
-                MOVE PROPERTY(totalHours(t)) {  // Отображаемое свойство для суммы часов
-                    caption = 'Суммарное количество часов';
+                MOVE PROPERTY(totalHours(t)) {
+                    caption = 'Часов';
                     captionWidth = 100;
                     valueWidth = 150;
-                    alignment = CENTER;  // Центрируем значение в поле
+                    alignment = CENTER;
                 }
             }
 
-            // Строка с датой и типом
+            // Дата и тип
             NEW dateAndTypePane {
                 horizontal = TRUE;
                 alignment = STRETCH;
@@ -178,7 +203,7 @@ DESIGN timeEntry {
                 }
             }
 
-            // Строка с новым описанием типа TEXT
+            // Описание
             MOVE PROPERTY(descriptionText(t)) {
                 captionWidth = 100;
                 valueWidth = 450;
@@ -188,16 +213,117 @@ DESIGN timeEntry {
                 flex = 1;
             }
 
-            // Панель для строк с выбором номенклатуры, количеством часов и количеством
+            // Панель для строк
             NEW workEntry {
-                caption = 'Вид работ';  // Устанавливаем только заголовок "Вид работ"
+                caption = 'Вид работ';
                 alignment = STRETCH;
                 MOVE BOX(l) {
                     PROPERTY(nameWorkType(l)) { notNull = TRUE; }
-                    PROPERTY(hours(l)) { caption = 'Количество часов'; }
                     PROPERTY(quantity(l)) { caption = 'Количество'; }
+                    PROPERTY(price(l)) { caption = 'Цена'; }
+                    PROPERTY(totalCost(l)) { caption = 'Общая стоимость'; }
+                }
+            }
+
+            // Добавляем строку с итоговой суммой
+            NEW totalWagePane {
+                horizontal = TRUE;
+                alignment = END;
+                MOVE PROPERTY(totalWage(t)) {
+                    caption = 'Итого ФОТ';
+                    captionWidth = 100;
+                    valueWidth = 150;
                 }
             }
         }
     }
+}
+
+// Процедура для копирования записи для дополнительных сотрудников
+copyTimeEntryForAdditionalEmployees (TimeEntry t) {
+    IF employee2(t) AND percent2(t) > 0 THEN {
+        NEW newEntry = TimeEntry {
+            date(newEntry) <- date(t);
+            project(newEntry) <- project(t);  // Копируем проект
+            totalHours(newEntry) <- totalHours(t);  // Оставляем такое же количество часов
+            employee(newEntry) <- employee2(t);  // Устанавливаем сотрудника
+            employee2(newEntry) <- employee(t);  // Сохраняем сотрудника 1
+            type(newEntry) <- type(t);
+            description(newEntry) <- descriptionText(t);
+            brigadier(newEntry) <- brigadier(t);  // Сохраняем бригадира
+            percent2(newEntry) <- percent(t);
+            percent(newEntry) <- percent2(t);
+            employee3(newEntry) <- employee3(t);
+            percent3(newEntry) <- percent3(t);
+            employee4(newEntry) <- employee4(t);
+            percent4(newEntry) <- percent4(t);
+
+            // Копируем строки номенклатуры для сотрудника 2
+            FOR timeEntry(TimeEntryLine l) = t INLINE NEW newLine = TimeEntryLine DO {
+                timeEntry(newLine) <- newEntry;        // Привязываем строку к новой записи
+                workType(newLine) <- workType(l);      // Копируем номенклатуру (вид работы)
+                quantity(newLine) <- quantity(l);      // Копируем количество
+                price(newLine) <- price(l);            // Копируем себестоимость
+            }
+        }
+    }
+
+    IF employee3(t) AND percent3(t) > 0 THEN {
+        NEW newEntry = TimeEntry {
+            date(newEntry) <- date(t);
+            project(newEntry) <- project(t);  // Копируем проект
+            totalHours(newEntry) <- totalHours(t);  // Оставляем такое же количество часов
+            employee(newEntry) <- employee3(t);  // Устанавливаем сотрудника
+            employee3(newEntry) <- employee(t);
+            type(newEntry) <- type(t);
+            description(newEntry) <- descriptionText(t);
+            brigadier(newEntry) <- brigadier(t);
+            percent3(newEntry) <- percent(t);
+            percent(newEntry) <- percent3(t);
+            employee2(newEntry) <- employee2(t);
+            percent2(newEntry) <- percent2(t);
+            employee4(newEntry) <- employee4(t);
+            percent4(newEntry) <- percent4(t);
+
+            // Копируем строки номенклатуры для сотрудника 3
+            FOR timeEntry(TimeEntryLine l) = t INLINE NEW newLine = TimeEntryLine DO {
+                timeEntry(newLine) <- newEntry;
+                workType(newLine) <- workType(l);
+                quantity(newLine) <- quantity(l);
+                price(newLine) <- price(l);            // Копируем себестоимость
+            }
+        }
+    }
+
+    IF employee4(t) AND percent4(t) > 0 THEN {
+        NEW newEntry = TimeEntry {
+            date(newEntry) <- date(t);
+            project(newEntry) <- project(t);  // Копируем проект
+            totalHours(newEntry) <- totalHours(t);  // Оставляем такое же количество часов
+            employee(newEntry) <- employee4(t);  // Устанавливаем сотрудника
+            employee4(newEntry) <- employee(t);
+            type(newEntry) <- type(t);
+            description(newEntry) <- descriptionText(t);
+            brigadier(newEntry) <- brigadier(t);
+            percent4(newEntry) <- percent(t);
+            percent(newEntry) <- percent4(t);
+            employee2(newEntry) <- employee2(t);
+            percent2(newEntry) <- percent2(t);
+            employee3(newEntry) <- employee3(t);
+            percent3(newEntry) <- percent3(t);
+
+            // Копируем строки номенклатуры для сотрудника 4
+            FOR timeEntry(TimeEntryLine l) = t INLINE NEW newLine = TimeEntryLine DO {
+                timeEntry(newLine) <- newEntry;
+                workType(newLine) <- workType(l);
+                quantity(newLine) <- quantity(l);
+                price(newLine) <- price(l);            // Копируем себестоимость
+            }
+        }
+    }
+}
+
+// Автоматическое создание записей для сотрудников 2, 3 и 4 после создания основной записи
+WHEN CHANGED(employee(t)) OR CHANGED(totalHours(t)) DO {
+    copyTimeEntryForAdditionalEmployees(t);
 }
