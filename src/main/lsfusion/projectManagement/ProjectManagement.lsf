@@ -14,4 +14,4 @@ REQUIRE Project, ProjectFilter,
         ProjectShipment, ProjectInvoiceShipment, ProjectSalesOrderShipment,
         ProjectManufacturingOrder,
         Shift, ProjectShift, ShiftSchedule,
-        TimesheetSupervisor, TimesheetSupervisorMobile, TimeEntryExtensions;
+        TimesheetSupervisor, TimesheetSupervisorMobile, TimesheetSupervisorCopy, TimeEntryExtensions;
