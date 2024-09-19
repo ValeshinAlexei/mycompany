@@ -7,12 +7,8 @@ PRIORITY MasterData;
 
 NAMESPACE ProjectManagement;
 
-// Свойство для расчета "Итого ФОТ" за день
-totalFOT 'Итого ФОТ' (DATE d) = GROUP SUM hoursTimesheet(d, Employee e) * 1000;  // Пример: количество часов * фиксированная ставка
-
-// Свойство для расчета суммы зарплаты по проценту сотрудника
-salaryAmount 'Сумма зарплаты' (Employee e, DATE d) =
-    totalFOT(d) * ProjectManagement.percent(ProjectManagement.timeEntry(d, e)) / 100;  // Используем percent из TimeEntryExtensions
+// Свойство для получения всех зарплатных сумм за день по каждой отметке времени
+salaryList 'Список зарплат' (Employee e, DATE d) = MULTI salary(timeEntry(d, e), e);
 
 // Копия формы Supervisor timesheet
 FORM timesheetSupervisorCopy 'Зарплатный Табель'
@@ -30,20 +26,29 @@ FORM timesheetSupervisorCopy 'Зарплатный Табель'
     OBJECTS e = Employee
     PROPERTIES(e) READONLY firstName, lastName, namePosition, rolesTimesheet
 
-    // Отображение часов и суммы зарплаты в каждой ячейке
-    PROPERTIES hoursTimesheet(d, e), salaryAmount(e, d) WAIT COLUMNS (d) HEADER extractDay(d) BACKGROUND backgroundHoursTimesheet(d, e)
+    // Отображение часов и списка сумм зарплаты в каждой ячейке
+    PROPERTIES hoursTimesheet(d, e), salaryList(e, d) WAIT COLUMNS (d) HEADER extractDay(d) BACKGROUND backgroundHoursTimesheet(d, e)
+
+    // Логика открытия формы с отметками при нажатии на ячейку
     ON CHANGE {
         FOR TimeEntryType et = timesheetTimeEntryType() AND
-            (timesheetProject() OR NOT project(ProjectManagement.timeEntry(d, e, timesheetTimeEntryType()))) DO {
+            (timesheetProject() OR NOT project(timeEntry(d, e, timesheetTimeEntryType()))) DO {
             IF NOT timesheetTimeEntryHours() THEN {
                 INPUT n = hoursTimesheet(d, e) DO {
                     changeSaveTimesheetHours(d, e, et, n, NULL, autoSaveTimesheetHours());
                 }
-            } ELSE
+            } ELSE {
                 changeSaveTimesheetHours(d, e, et, hours(timesheetTimeEntryHours()), timesheetTimeEntryHours(), autoSaveTimesheetHours());
-        } ELSE
-        SHOW timesheetSupervisorDateEmployee OBJECTS i = interval(d, d), e = e FLOAT;
-    } ON CONTEXTMENU copyHours(d) ON CONTEXTMENU clearHours(d) FOOTER hours(d, timesheetProject())
+            }
+        } ELSE {
+            // Здесь добавляем вызов формы с отметками времени
+            SHOW timesheetSupervisorDateEmployee OBJECTS i = interval(d, d), e = e FLOAT;
+        }
+    }
+
+    ON CONTEXTMENU copyHours(d) ON CONTEXTMENU clearHours(d) FOOTER hours(d, timesheetProject())
+
+    // Фильтры для отображения только тех сотрудников, которые назначены на проект
     FILTERS assigned(timesheetProject(), e, dates) OR
         (NOT countAssignments(timesheetProject()) AND NOT countAssignments(currentUser()))
 
@@ -56,7 +61,7 @@ FORM timesheetSupervisorCopy 'Зарплатный Табель'
         nextInterval '>' = { SEEK timesheetSupervisorCopy.dates = nextMonthInterval(dates); }
 ;
 
-// Оформление формы timesheetSupervisorCopy
+// Оформление копии формы timesheetSupervisorCopy
 DESIGN timesheetSupervisorCopy {
     OBJECTS {
         NEW header {
@@ -95,9 +100,10 @@ DESIGN timesheetSupervisorCopy {
                         charWidth = 10;  // Увеличиваем ширину текста
                         charHeight = 5;  // Увеличиваем высоту текста
                     }
-                    // Отображаем зарплату в каждой ячейке
-                    PROPERTY(salaryAmount(e, d)) {
+                    PROPERTY(salaryList(e, d)) {
                         caption = 'Сумма зарплаты';
+                        charWidth = 10;
+                        charHeight = 2; // Чтобы зарплаты отображались одна под другой
                     }
                 }
             }
@@ -107,11 +113,10 @@ DESIGN timesheetSupervisorCopy {
 
 // Навигатор для копии формы
 NAVIGATOR {
-    NEW FOLDER salary 'Зарплата' WINDOW toolbar FIRST {  // Папка "Зарплата" в панели навигатора
-        NEW FORM timesheetSupervisorCopy;  // Добавляем копию формы в эту папку
+    NEW FOLDER salary 'Зарплата' WINDOW toolbar FIRST {
+        NEW FORM timesheetSupervisorCopy;
     }
 }
 
-// Обновление при изменении типа временной записи
 WHEN LOCAL FORMS timesheetSupervisorCopy CHANGED(timesheetTimeEntryType()) DO
     timesheetTimeEntryHours() <- defaultHours(timesheetTimeEntryType());

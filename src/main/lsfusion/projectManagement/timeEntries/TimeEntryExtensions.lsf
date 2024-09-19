@@ -327,3 +327,12 @@ copyTimeEntryForAdditionalEmployees (TimeEntry t) {
 WHEN CHANGED(employee(t)) OR CHANGED(totalHours(t)) DO {
     copyTimeEntryForAdditionalEmployees(t);
 }
+
+// Вычисляем зарплату для каждого сотрудника в зависимости от процента
+salary 'Зарплата' (TimeEntry t, Employee e) =
+    CASE
+        WHEN e = employee(t) THEN totalWage(t) * percent(t) / 100
+        WHEN e = employee2(t) THEN totalWage(t) * percent2(t) / 100
+        WHEN e = employee3(t) THEN totalWage(t) * percent3(t) / 100
+        WHEN e = employee4(t) THEN totalWage(t) * percent4(t) / 100
+        ELSE 0;
