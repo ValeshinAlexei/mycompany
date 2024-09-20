@@ -249,7 +249,7 @@ copyTimeEntryForAdditionalEmployees (TimeEntry t) {
             employee(newEntry) <- employee2(t);  // Устанавливаем сотрудника
             employee2(newEntry) <- employee(t);  // Сохраняем сотрудника 1
             type(newEntry) <- type(t);
-            description(newEntry) <- descriptionText(t);
+            descriptionText(newEntry) <- descriptionText(t);  // Копируем новое описание
             brigadier(newEntry) <- brigadier(t);  // Сохраняем бригадира
             percent2(newEntry) <- percent(t);
             percent(newEntry) <- percent2(t);
@@ -276,7 +276,7 @@ copyTimeEntryForAdditionalEmployees (TimeEntry t) {
             employee(newEntry) <- employee3(t);  // Устанавливаем сотрудника
             employee3(newEntry) <- employee(t);
             type(newEntry) <- type(t);
-            description(newEntry) <- descriptionText(t);
+            descriptionText(newEntry) <- descriptionText(t);  // Копируем новое описание
             brigadier(newEntry) <- brigadier(t);
             percent3(newEntry) <- percent(t);
             percent(newEntry) <- percent3(t);
@@ -303,7 +303,7 @@ copyTimeEntryForAdditionalEmployees (TimeEntry t) {
             employee(newEntry) <- employee4(t);  // Устанавливаем сотрудника
             employee4(newEntry) <- employee(t);
             type(newEntry) <- type(t);
-            description(newEntry) <- descriptionText(t);
+            descriptionText(newEntry) <- descriptionText(t);  // Копируем новое описание
             brigadier(newEntry) <- brigadier(t);
             percent4(newEntry) <- percent(t);
             percent(newEntry) <- percent4(t);
@@ -336,3 +336,7 @@ salary 'Зарплата' (TimeEntry t, Employee e) =
         WHEN e = employee3(t) THEN totalWage(t) * percent3(t) / 100
         WHEN e = employee4(t) THEN totalWage(t) * percent4(t) / 100
         ELSE 0;
+
+// Свойство для вычисления общей зарплаты по всем отметкам времени
+totalSalary 'Общая зарплата' (Employee e, DATE d) =
+    GROUP SUM salary(t, e) IF date(t) = d AND employee(t) = e;

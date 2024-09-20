@@ -7,8 +7,9 @@ PRIORITY MasterData;
 
 NAMESPACE ProjectManagement;
 
-// Свойство для получения всех зарплатных сумм за день по каждой отметке времени
-salaryList 'Список зарплат' (Employee e, DATE d) = MULTI salary(timeEntry(d, e), e);
+// Свойство для получения всех зарплатных сумм за день по каждому сотруднику
+salaryList 'Список зарплат' (Employee e, DATE d) =
+    GROUP SUM totalSalary(e, d); // Используем свойство из TimeEntryExtensions
 
 // Копия формы Supervisor timesheet
 FORM timesheetSupervisorCopy 'Зарплатный Табель'
@@ -32,7 +33,7 @@ FORM timesheetSupervisorCopy 'Зарплатный Табель'
     // Логика открытия формы с отметками при нажатии на ячейку
     ON CHANGE {
         FOR TimeEntryType et = timesheetTimeEntryType() AND
-            (timesheetProject() OR NOT project(timeEntry(d, e, timesheetTimeEntryType()))) DO {
+            (timesheetProject() OR NOT project(timeEntry(d, e, et))) DO {
             IF NOT timesheetTimeEntryHours() THEN {
                 INPUT n = hoursTimesheet(d, e) DO {
                     changeSaveTimesheetHours(d, e, et, n, NULL, autoSaveTimesheetHours());
@@ -41,7 +42,7 @@ FORM timesheetSupervisorCopy 'Зарплатный Табель'
                 changeSaveTimesheetHours(d, e, et, hours(timesheetTimeEntryHours()), timesheetTimeEntryHours(), autoSaveTimesheetHours());
             }
         } ELSE {
-            // Здесь добавляем вызов формы с отметками времени
+            // Вызов формы с отметками времени
             SHOW timesheetSupervisorDateEmployee OBJECTS i = interval(d, d), e = e FLOAT;
         }
     }
@@ -95,15 +96,15 @@ DESIGN timesheetSupervisorCopy {
                 MOVE BOX(e) {
                     caption = '';
                     PROPERTY(hoursTimesheet(d, e)) {
-                        width = 200;  // Увеличиваем ширину ячейки
-                        height = 40;  // Увеличиваем высоту ячейки
-                        charWidth = 10;  // Увеличиваем ширину текста
-                        charHeight = 5;  // Увеличиваем высоту текста
+                        width = 200;
+                        height = 40;
+                        charWidth = 10;
+                        charHeight = 5;
                     }
                     PROPERTY(salaryList(e, d)) {
                         caption = 'Сумма зарплаты';
                         charWidth = 10;
-                        charHeight = 2; // Чтобы зарплаты отображались одна под другой
+                        charHeight = 2;
                     }
                 }
             }
