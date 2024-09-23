@@ -4,6 +4,9 @@ REQUIRE TimeEntry, Project, ProjectTimeEntry, TimeEntryHours, ItemSales, Employe
 
 NAMESPACE ProjectManagement;
 
+// Добавляем поле для связи с родительской отметкой
+parentEntry 'Родительская отметка' = DATA TimeEntry (TimeEntry);
+
 // Добавляем поля для процентов и дополнительных сотрудников
 percent 'Процент' = DATA NUMERIC[5,2] (TimeEntry);
 employee2 'Сотрудник 2' = DATA Employee (TimeEntry);
@@ -53,6 +56,15 @@ WHEN LOCAL SETCHANGED(workType(TimeEntryLine l)) AND NOT CHANGED(price(l)) DO
 // Общая сумма по всем позициям (Итого ФОТ)
 totalWage 'Итого ФОТ' (TimeEntry t) = GROUP SUM totalCost(TimeEntryLine l) BY timeEntry(l);
 
+// Новый класс для события отметки времени
+CLASS TimeEntryEvent 'Событие отметки времени';
+
+// Поле descriptionEvent для описания события
+descriptionEvent 'Описание события' = DATA TEXT (TimeEntryEvent);
+
+// Связь с событием
+event 'Событие' = DATA TimeEntryEvent (TimeEntry);
+
 // Проверка на уникальность сотрудников в записи времени
 CONSTRAINT
     employee2(t) = employee(t) OR
@@ -85,15 +97,13 @@ brigadier(TimeEntry t) <- employee(t) WHEN CHANGED(employee(t));
 // Вычисляемое свойство для отображения имени бригадира
 nameBrigadier 'Бригадир' (TimeEntry t) = MasterData.name(brigadier(t));
 
-// Формы
 EXTEND FORM timeEntry
-    PROPERTIES(t) percent, nameEmployee2, percent2, nameEmployee3, percent3, nameEmployee4, percent4, descriptionText, totalHours, nameBrigadier READONLY, totalWage
+    PROPERTIES(t) percent READONLY, nameEmployee2, percent2, nameEmployee3, percent3, nameEmployee4, percent4, descriptionText, totalHours, nameBrigadier READONLY, totalWage, event
     OBJECTS l = TimeEntryLine
     PROPERTIES(l) nameWorkType, quantity, price, totalCost
     PROPERTIES(l) NEW, DELETE
     FILTERS timeEntry(l) = t;
 
-// Оформление формы
 DESIGN timeEntry {
     OBJECTS {
         MOVE pane {
@@ -222,6 +232,17 @@ DESIGN timeEntry {
                 }
             }
 
+            // Панель для события (новое)
+            NEW eventPane {
+                horizontal = TRUE;
+                alignment = STRETCH;
+                MOVE PROPERTY(event(t)) {
+                    caption = 'Событие';
+                    captionWidth = 100;
+                    valueWidth = 150;
+                }
+            }
+
             // Добавляем строку с итоговой суммой
             NEW totalWagePane {
                 horizontal = TRUE;
@@ -236,6 +257,69 @@ DESIGN timeEntry {
     }
 }
 
+// Логика обновления всех связанных отметок по событию
+WHEN CHANGED(totalHours(TimeEntry t)) AND event(t) DO {
+    FOR TimeEntry relatedEntry = TimeEntry DO {
+        IF event(relatedEntry) = event(t) THEN {
+            totalHours(relatedEntry) <- totalHours(t);
+        }
+    }
+}
+
+// Логика обновления количества в строках отметок времени по событию
+WHEN CHANGED(quantity(TimeEntryLine l)) AND event(timeEntry(l)) DO {
+    FOR TimeEntryLine relatedLine = TimeEntryLine DO {
+        IF event(timeEntry(relatedLine)) = event(timeEntry(l)) THEN {
+            quantity(relatedLine) <- quantity(l);
+        }
+    }
+}
+
+// Логика копирования новых строк при их создании в родительской отметке
+WHEN LOCAL CHANGED(TimeEntryLine l) AND event(timeEntry(l)) DO {
+    FOR TimeEntry relatedEntry = TimeEntry DO {
+        IF event(relatedEntry) = event(timeEntry(l)) THEN {
+            NEW newLine = TimeEntryLine {
+                timeEntry(newLine) <- relatedEntry;
+                workType(newLine) <- workType(l);
+                quantity(newLine) <- quantity(l);
+                price(newLine) <- price(l);
+            }
+        }
+    }
+}
+
+
+// Логика обновления проекта для всех связанных отметок по событию
+WHEN CHANGED(project(TimeEntry t)) AND event(t) DO {
+    FOR TimeEntry relatedEntry = TimeEntry DO {
+        IF event(relatedEntry) = event(t) THEN {
+            project(relatedEntry) <- project(t);
+        }
+    }
+}
+
+// Логика обновления процентов для всех связанных отметок
+WHEN CHANGED(percent(TimeEntry t)) OR CHANGED(percent2(t)) OR CHANGED(percent3(t)) OR CHANGED(percent4(t))
+    AND event(t) DO {
+    FOR TimeEntry relatedEntry = TimeEntry DO {
+        IF event(relatedEntry) = event(t) THEN {
+            // Если текущий процент относится к первому сотруднику
+            IF employee(relatedEntry) = employee(t) THEN
+                percent(relatedEntry) <- percent(t);
+            IF employee2(relatedEntry) = employee2(t) THEN
+                percent2(relatedEntry) <- percent2(t);
+            IF employee3(relatedEntry) = employee3(t) THEN
+                percent3(relatedEntry) <- percent3(t);
+            IF employee4(relatedEntry) = employee4(t) THEN
+                percent4(relatedEntry) <- percent4(t);
+        }
+    }
+}
+
+
+
+
 // Процедура для копирования записи для дополнительных сотрудников
 copyTimeEntryForAdditionalEmployees (TimeEntry t) {
     IF employee2(t) AND percent2(t) > 0 THEN {
@@ -244,6 +328,7 @@ copyTimeEntryForAdditionalEmployees (TimeEntry t) {
             project(newEntry) <- project(t);
             totalHours(newEntry) <- totalHours(t);
             employee(newEntry) <- employee2(t);
+            event(newEntry) <- event(t); // Присваиваем событие исходной отметки
             employee2(newEntry) <- employee(t);
             type(newEntry) <- type(t);
             descriptionText(newEntry) <- descriptionText(t);
@@ -255,6 +340,7 @@ copyTimeEntryForAdditionalEmployees (TimeEntry t) {
             employee4(newEntry) <- employee4(t);
             percent4(newEntry) <- percent4(t);
 
+            // Копируем строки
             FOR timeEntry(TimeEntryLine l) = t INLINE NEW newLine = TimeEntryLine DO {
                 timeEntry(newLine) <- newEntry;
                 workType(newLine) <- workType(l);
@@ -270,6 +356,7 @@ copyTimeEntryForAdditionalEmployees (TimeEntry t) {
             project(newEntry) <- project(t);
             totalHours(newEntry) <- totalHours(t);
             employee(newEntry) <- employee3(t);
+            event(newEntry) <- event(t); // Присваиваем событие исходной отметки
             employee3(newEntry) <- employee(t);
             type(newEntry) <- type(t);
             descriptionText(newEntry) <- descriptionText(t);
@@ -281,6 +368,7 @@ copyTimeEntryForAdditionalEmployees (TimeEntry t) {
             employee4(newEntry) <- employee4(t);
             percent4(newEntry) <- percent4(t);
 
+            // Копируем строки
             FOR timeEntry(TimeEntryLine l) = t INLINE NEW newLine = TimeEntryLine DO {
                 timeEntry(newLine) <- newEntry;
                 workType(newLine) <- workType(l);
@@ -296,6 +384,7 @@ copyTimeEntryForAdditionalEmployees (TimeEntry t) {
             project(newEntry) <- project(t);
             totalHours(newEntry) <- totalHours(t);
             employee(newEntry) <- employee4(t);
+            event(newEntry) <- event(t); // Присваиваем событие исходной отметки
             employee4(newEntry) <- employee(t);
             type(newEntry) <- type(t);
             descriptionText(newEntry) <- descriptionText(t);
@@ -307,6 +396,7 @@ copyTimeEntryForAdditionalEmployees (TimeEntry t) {
             employee3(newEntry) <- employee3(t);
             percent3(newEntry) <- percent3(t);
 
+            // Копируем строки
             FOR timeEntry(TimeEntryLine l) = t INLINE NEW newLine = TimeEntryLine DO {
                 timeEntry(newLine) <- newEntry;
                 workType(newLine) <- workType(l);
@@ -319,16 +409,23 @@ copyTimeEntryForAdditionalEmployees (TimeEntry t) {
 
 // Копирование записей только при создании новой отметки
 WHEN SET(TimeEntry t IS TimeEntry) DO {
+    IF NOT event(t) THEN {
+        NEW e = TimeEntryEvent {
+            event(t) <- e;
+            descriptionEvent(e) <- 'Создано событие для отметки времени';
+        };
+    }
+
     copyTimeEntryForAdditionalEmployees(t);
 }
 
 // Вычисляем зарплату для каждого сотрудника в зависимости от процента
 salary 'Зарплата' (TimeEntry t, Employee e) =
     CASE
-        WHEN e = employee(t) THEN totalWage(t) * percent(t) / 100
-        WHEN e = employee2(t) THEN totalWage(t) * percent2(t) / 100
-        WHEN e = employee3(t) THEN totalWage(t) * percent3(t) / 100
-        WHEN e = employee4(t) THEN totalWage(t) * percent4(t) / 100
+        WHEN e = employee(t) THEN totalWage(t) * (percent(t) / 100)
+        WHEN e = employee2(t) THEN totalWage(t) * (percent2(t) / 100)
+        WHEN e = employee3(t) THEN totalWage(t) * (percent3(t) / 100)
+        WHEN e = employee4(t) THEN totalWage(t) * (percent4(t) / 100)
         ELSE 0;
 
 // Свойство для вычисления общей зарплаты по всем отметкам времени
