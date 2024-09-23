@@ -98,7 +98,7 @@ brigadier(TimeEntry t) <- employee(t) WHEN CHANGED(employee(t));
 nameBrigadier 'Бригадир' (TimeEntry t) = MasterData.name(brigadier(t));
 
 EXTEND FORM timeEntry
-    PROPERTIES(t) percent READONLY, nameEmployee2, percent2, nameEmployee3, percent3, nameEmployee4, percent4, descriptionText, totalHours, nameBrigadier READONLY, totalWage, event
+    PROPERTIES(t) percent READONLY , nameEmployee2, percent2, nameEmployee3, percent3, nameEmployee4, percent4, descriptionText, totalHours, nameBrigadier READONLY, totalWage, event
     OBJECTS l = TimeEntryLine
     PROPERTIES(l) nameWorkType, quantity, price, totalCost
     PROPERTIES(l) NEW, DELETE
@@ -274,21 +274,6 @@ WHEN CHANGED(quantity(TimeEntryLine l)) AND event(timeEntry(l)) DO {
         }
     }
 }
-
-// Логика копирования новых строк при их создании в родительской отметке
-WHEN LOCAL CHANGED(TimeEntryLine l) AND event(timeEntry(l)) DO {
-    FOR TimeEntry relatedEntry = TimeEntry DO {
-        IF event(relatedEntry) = event(timeEntry(l)) THEN {
-            NEW newLine = TimeEntryLine {
-                timeEntry(newLine) <- relatedEntry;
-                workType(newLine) <- workType(l);
-                quantity(newLine) <- quantity(l);
-                price(newLine) <- price(l);
-            }
-        }
-    }
-}
-
 
 // Логика обновления проекта для всех связанных отметок по событию
 WHEN CHANGED(project(TimeEntry t)) AND event(t) DO {
