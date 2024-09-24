@@ -16,6 +16,7 @@ percent3 'Процент 3' = DATA NUMERIC[5,2] (TimeEntry) NONULL;
 employee4 'Сотрудник 4' = DATA Employee (TimeEntry);
 percent4 'Процент 4' = DATA NUMERIC[5,2] (TimeEntry) NONULL;
 
+
 // Уникальные имена для дополнительных сотрудников
 nameEmployee2 'Сотрудник 2' (TimeEntry t) = MasterData.name(employee2(t));
 nameEmployee3 'Сотрудник 3' (TimeEntry t) = MasterData.name(employee3(t));
@@ -25,45 +26,46 @@ nameEmployee4 'Сотрудник 4' (TimeEntry t) = MasterData.name(employee4(t
 descriptionText 'Описание' = DATA TEXT (TimeEntry);
 
 // Новый класс для строк отметки времени
-CLASS TimeEntryLine;
+CLASS SharedTimeEntryLine;
 
-// Связь строки отметки времени с основной записью отметки времени
-timeEntry = DATA TimeEntry (TimeEntryLine) NONULL DELETE;
+// Связь строки отметки времени с событием
+event = DATA TimeEntryEvent (SharedTimeEntryLine);
 
 // Вид работ (номенклатура)
-workType 'Вид работ' = DATA Item (TimeEntryLine) NONULL;
-nameWorkType 'Вид работ' (TimeEntryLine l) = MasterData.name(workType(l));
+workType 'Вид работ' = DATA Item (SharedTimeEntryLine) NONULL;
+nameWorkType 'Вид работ' (SharedTimeEntryLine l) = MasterData.name(workType(l));
 
 // Количество (например, количество единиц работы)
-quantity 'Количество' = DATA NUMERIC[16,3] (TimeEntryLine);
+quantity 'Количество' = DATA NUMERIC[16,3] (SharedTimeEntryLine);
 
 // Цена за единицу работы (подтягивается из себестоимости)
-price 'Цена' = DATA NUMERIC[10,2] (TimeEntryLine);
+price 'Цена' = DATA NUMERIC[10,2] (SharedTimeEntryLine);
 
 // Общая стоимость строки (количество * цена)
-totalCost 'Общая стоимость' (TimeEntryLine l) = quantity(l) * price(l);
+totalCost 'Общая стоимость' (SharedTimeEntryLine l) = quantity(l) * price(l);
 
 // Логика для присвоения плановой себестоимости
-defaultPrice 'Цена по умолчанию' (TimeEntryLine l) =
+defaultPrice 'Цена по умолчанию' (SharedTimeEntryLine l) =
     CASE
         WHEN cost(workType(l), currentDate()) THEN cost(workType(l), currentDate())
         ELSE 100;
 
 // Присваиваем себестоимость по умолчанию при выборе вида работ
-WHEN LOCAL SETCHANGED(workType(TimeEntryLine l)) AND NOT CHANGED(price(l)) DO
+WHEN LOCAL SETCHANGED(workType(SharedTimeEntryLine l)) AND NOT CHANGED(price(l)) DO
     price(l) <- defaultPrice(l);
 
+// Связь с событием
+event 'Событие' = DATA TimeEntryEvent (TimeEntry);
+
 // Общая сумма по всем позициям (Итого ФОТ)
-totalWage 'Итого ФОТ' (TimeEntry t) = GROUP SUM totalCost(TimeEntryLine l) BY timeEntry(l);
+totalWage 'Итого ФОТ' (TimeEntry t) =
+    GROUP SUM totalCost(SharedTimeEntryLine l) IF event(l) = event(t);
 
 // Новый класс для события отметки времени
 CLASS TimeEntryEvent 'Событие отметки времени';
 
 // Поле descriptionEvent для описания события
 descriptionEvent 'Описание события' = DATA TEXT (TimeEntryEvent);
-
-// Связь с событием
-event 'Событие' = DATA TimeEntryEvent (TimeEntry);
 
 // Проверка на уникальность сотрудников в записи времени
 CONSTRAINT
@@ -98,11 +100,12 @@ brigadier(TimeEntry t) <- employee(t) WHEN CHANGED(employee(t));
 nameBrigadier 'Бригадир' (TimeEntry t) = MasterData.name(brigadier(t));
 
 EXTEND FORM timeEntry
+    
     PROPERTIES(t) percent READONLY , nameEmployee2, percent2, nameEmployee3, percent3, nameEmployee4, percent4, descriptionText, totalHours, nameBrigadier READONLY, totalWage, event
-    OBJECTS l = TimeEntryLine
+    OBJECTS l = SharedTimeEntryLine
     PROPERTIES(l) nameWorkType, quantity, price, totalCost
-    PROPERTIES(l) NEW, DELETE
-    FILTERS timeEntry(l) = t;
+    PROPERTIES(l) NEW, DELETE;
+    //FILTERS event(l) = event(t);
 
 DESIGN timeEntry {
     OBJECTS {
@@ -257,20 +260,24 @@ DESIGN timeEntry {
     }
 }
 
-// Логика обновления всех связанных отметок по событию
-WHEN CHANGED(totalHours(TimeEntry t)) AND event(t) DO {
+
+
+// Логика обновления Типа рабочего дня всех связанных отметок по событию
+WHEN CHANGED(type(TimeEntry t)) AND event(t) DO {
     FOR TimeEntry relatedEntry = TimeEntry DO {
         IF event(relatedEntry) = event(t) THEN {
-            totalHours(relatedEntry) <- totalHours(t);
+            type(relatedEntry) <- type(t);
         }
     }
 }
 
-// Логика обновления количества в строках отметок времени по событию
-WHEN CHANGED(quantity(TimeEntryLine l)) AND event(timeEntry(l)) DO {
-    FOR TimeEntryLine relatedLine = TimeEntryLine DO {
-        IF event(timeEntry(relatedLine)) = event(timeEntry(l)) THEN {
-            quantity(relatedLine) <- quantity(l);
+
+
+// Логика обновления часов всех связанных отметок по событию
+WHEN CHANGED(totalHours(TimeEntry t)) AND event(t) DO {
+    FOR TimeEntry relatedEntry = TimeEntry DO {
+        IF event(relatedEntry) = event(t) THEN {
+            totalHours(relatedEntry) <- totalHours(t);
         }
     }
 }
@@ -289,18 +296,62 @@ WHEN CHANGED(percent(TimeEntry t)) OR CHANGED(percent2(t)) OR CHANGED(percent3(t
     AND event(t) DO {
     FOR TimeEntry relatedEntry = TimeEntry DO {
         IF event(relatedEntry) = event(t) THEN {
-            // Если текущий процент относится к первому сотруднику
-            IF employee(relatedEntry) = employee(t) THEN
-                percent(relatedEntry) <- percent(t);
-            IF employee2(relatedEntry) = employee2(t) THEN
-                percent2(relatedEntry) <- percent2(t);
-            IF employee3(relatedEntry) = employee3(t) THEN
-                percent3(relatedEntry) <- percent3(t);
-            IF employee4(relatedEntry) = employee4(t) THEN
-                percent4(relatedEntry) <- percent4(t);
+
+            // Обновляем процент сотрудника, если он на первой позиции в текущей отметке
+            IF employee(t) THEN {
+                // Обновляем процент для всех записей, где этот сотрудник находится на любой позиции
+                IF employee(relatedEntry) = employee(t) THEN
+                    percent(relatedEntry) <- percent(t);
+                IF employee2(relatedEntry) = employee(t) THEN
+                    percent2(relatedEntry) <- percent(t);
+                IF employee3(relatedEntry) = employee(t) THEN
+                    percent3(relatedEntry) <- percent(t);
+                IF employee4(relatedEntry) = employee(t) THEN
+                    percent4(relatedEntry) <- percent(t);
+            }
+
+            // Обновляем процент сотрудника, если он на второй позиции в текущей отметке
+            IF employee2(t) THEN {
+                IF employee(relatedEntry) = employee2(t) THEN
+                    percent(relatedEntry) <- percent2(t);
+                IF employee2(relatedEntry) = employee2(t) THEN
+                    percent2(relatedEntry) <- percent2(t);
+                IF employee3(relatedEntry) = employee2(t) THEN
+                    percent3(relatedEntry) <- percent2(t);
+                IF employee4(relatedEntry) = employee2(t) THEN
+                    percent4(relatedEntry) <- percent2(t);
+            }
+
+            // Обновляем процент сотрудника, если он на третьей позиции в текущей отметке
+            IF employee3(t) THEN {
+                IF employee(relatedEntry) = employee3(t) THEN
+                    percent(relatedEntry) <- percent3(t);
+                IF employee2(relatedEntry) = employee3(t) THEN
+                    percent2(relatedEntry) <- percent3(t);
+                IF employee3(relatedEntry) = employee3(t) THEN
+                    percent3(relatedEntry) <- percent3(t);
+                IF employee4(relatedEntry) = employee3(t) THEN
+                    percent4(relatedEntry) <- percent3(t);
+            }
+
+            // Обновляем процент сотрудника, если он на четвертой позиции в текущей отметке
+            IF employee4(t) THEN {
+                IF employee(relatedEntry) = employee4(t) THEN
+                    percent(relatedEntry) <- percent4(t);
+                IF employee2(relatedEntry) = employee4(t) THEN
+                    percent2(relatedEntry) <- percent4(t);
+                IF employee3(relatedEntry) = employee4(t) THEN
+                    percent3(relatedEntry) <- percent4(t);
+                IF employee4(relatedEntry) = employee4(t) THEN
+                    percent4(relatedEntry) <- percent4(t);
+            }
+
         }
     }
 }
+
+
+
 
 
 
@@ -324,14 +375,6 @@ copyTimeEntryForAdditionalEmployees (TimeEntry t) {
             percent3(newEntry) <- percent3(t);
             employee4(newEntry) <- employee4(t);
             percent4(newEntry) <- percent4(t);
-
-            // Копируем строки
-            FOR timeEntry(TimeEntryLine l) = t INLINE NEW newLine = TimeEntryLine DO {
-                timeEntry(newLine) <- newEntry;
-                workType(newLine) <- workType(l);
-                quantity(newLine) <- quantity(l);
-                price(newLine) <- price(l);
-            }
         }
     }
 
@@ -352,14 +395,6 @@ copyTimeEntryForAdditionalEmployees (TimeEntry t) {
             percent2(newEntry) <- percent2(t);
             employee4(newEntry) <- employee4(t);
             percent4(newEntry) <- percent4(t);
-
-            // Копируем строки
-            FOR timeEntry(TimeEntryLine l) = t INLINE NEW newLine = TimeEntryLine DO {
-                timeEntry(newLine) <- newEntry;
-                workType(newLine) <- workType(l);
-                quantity(newLine) <- quantity(l);
-                price(newLine) <- price(l);
-            }
         }
     }
 
@@ -380,19 +415,11 @@ copyTimeEntryForAdditionalEmployees (TimeEntry t) {
             percent2(newEntry) <- percent2(t);
             employee3(newEntry) <- employee3(t);
             percent3(newEntry) <- percent3(t);
-
-            // Копируем строки
-            FOR timeEntry(TimeEntryLine l) = t INLINE NEW newLine = TimeEntryLine DO {
-                timeEntry(newLine) <- newEntry;
-                workType(newLine) <- workType(l);
-                quantity(newLine) <- quantity(l);
-                price(newLine) <- price(l);
-            }
         }
     }
 }
 
-// Копирование записей только при создании новой отметки
+// Копирование записей при создании новой отметки
 WHEN SET(TimeEntry t IS TimeEntry) DO {
     IF NOT event(t) THEN {
         NEW e = TimeEntryEvent {
