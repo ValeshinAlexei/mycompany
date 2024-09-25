@@ -81,6 +81,7 @@ percent(t) <- 100 - (percent2(t) + percent3(t) + percent4(t))
 totalHours 'Часов' = DATA NUMERIC[16,3] (TimeEntry);
 hours(TimeEntry t) <- totalHours(t) WHEN CHANGED(totalHours(t));
 
+
 // Инициализация процентов сотрудников 2, 3, 4 при создании новой записи
 percent2(TimeEntry t) <- 0 WHEN SET(t IS TimeEntry);
 percent3(TimeEntry t) <- 0 WHEN SET(t IS TimeEntry);

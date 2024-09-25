@@ -11,6 +11,11 @@ NAMESPACE ProjectManagement;
 salaryList 'Список зарплат' (Employee e, DATE d) =
     GROUP SUM totalSalary(e, d); // Используем свойство из TimeEntryExtensions
 
+// Новое свойство для объединения часов и зарплаты в одну строку
+summary 'Часы / Зарплата' (Employee e, DATE d) = hoursTimesheet(d, e) + 'ч'+ '/' + ROUND(salaryList(e, d)) + ' ₽';
+
+
+
 // Копия формы Supervisor timesheet
 FORM timesheetSupervisorCopy 'Зарплатный Табель'
     OBJECTS dates = INTERVAL[DATE] PANEL NULL
@@ -27,8 +32,8 @@ FORM timesheetSupervisorCopy 'Зарплатный Табель'
     OBJECTS e = Employee
     PROPERTIES(e) READONLY firstName, lastName, namePosition, rolesTimesheet
 
-    // Отображение часов и списка сумм зарплаты в каждой ячейке
-    PROPERTIES hoursTimesheet(d, e), salaryList(e, d) WAIT COLUMNS (d) HEADER extractDay(d) BACKGROUND backgroundHoursTimesheet(d, e)
+    // Отображение сводки с часами и зарплатой в каждой ячейке
+    PROPERTIES summary(e, d) WAIT COLUMNS (d) HEADER extractDay(d) BACKGROUND backgroundHoursTimesheet(d, e)
 
     // Логика открытия формы с отметками при нажатии на ячейку
     ON CHANGE {
@@ -95,16 +100,11 @@ DESIGN timesheetSupervisorCopy {
                 }
                 MOVE BOX(e) {
                     caption = '';
-                    PROPERTY(hoursTimesheet(d, e)) {
+                    PROPERTY(summary(e, d)) {
                         width = 200;
                         height = 40;
                         charWidth = 10;
                         charHeight = 5;
-                    }
-                    PROPERTY(salaryList(e, d)) {
-                        caption = 'Сумма зарплаты';
-                        charWidth = 10;
-                        charHeight = 2;
                     }
                 }
             }
