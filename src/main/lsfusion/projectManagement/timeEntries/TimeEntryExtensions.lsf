@@ -16,7 +16,6 @@ percent3 'Процент 3' = DATA NUMERIC[5,2] (TimeEntry) NONULL;
 employee4 'Сотрудник 4' = DATA Employee (TimeEntry);
 percent4 'Процент 4' = DATA NUMERIC[5,2] (TimeEntry) NONULL;
 
-
 // Уникальные имена для дополнительных сотрудников
 nameEmployee2 'Сотрудник 2' (TimeEntry t) = MasterData.name(employee2(t));
 nameEmployee3 'Сотрудник 3' (TimeEntry t) = MasterData.name(employee3(t));
@@ -28,8 +27,8 @@ descriptionText 'Описание' = DATA TEXT (TimeEntry);
 // Новый класс для строк отметки времени
 CLASS SharedTimeEntryLine;
 
-// Связь строки отметки времени с событием
-event = DATA TimeEntryEvent (SharedTimeEntryLine);
+// Связь строки отметки времени с записью TimeEntry
+entry 'Отметка времени' = DATA TimeEntry (SharedTimeEntryLine);
 
 // Вид работ (номенклатура)
 workType 'Вид работ' = DATA Item (SharedTimeEntryLine) NONULL;
@@ -54,12 +53,7 @@ defaultPrice 'Цена по умолчанию' (SharedTimeEntryLine l) =
 WHEN LOCAL SETCHANGED(workType(SharedTimeEntryLine l)) AND NOT CHANGED(price(l)) DO
     price(l) <- defaultPrice(l);
 
-// Связь с событием
-event 'Событие' = DATA TimeEntryEvent (TimeEntry);
 
-// Общая сумма по всем позициям (Итого ФОТ)
-totalWage 'Итого ФОТ' (TimeEntry t) =
-    GROUP SUM totalCost(SharedTimeEntryLine l) IF event(l) = event(t);
 
 // Новый класс для события отметки времени
 CLASS TimeEntryEvent 'Событие отметки времени';
@@ -99,13 +93,37 @@ brigadier(TimeEntry t) <- employee(t) WHEN CHANGED(employee(t));
 // Вычисляемое свойство для отображения имени бригадира
 nameBrigadier 'Бригадир' (TimeEntry t) = MasterData.name(brigadier(t));
 
+event 'Событие отметки времени' = DATA TimeEntryEvent (TimeEntry);
+event 'Событие строки' = DATA TimeEntryEvent (SharedTimeEntryLine);
+
+
+// Общая сумма по всем строкам (Итого ФОТ)
+totalWage 'Итого ФОТ' (TimeEntry t) =
+    GROUP SUM totalCost(SharedTimeEntryLine l) IF event(l) = event(t);  // Фильтруем строки по событию
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+eventTimeEntry 'Событие отметки времени' = DATA TimeEntryEvent (TimeEntry);
+
+// Форма TimeEntry с отображением строк и суммы
 EXTEND FORM timeEntry
-    
-    PROPERTIES(t) percent READONLY , nameEmployee2, percent2, nameEmployee3, percent3, nameEmployee4, percent4, descriptionText, totalHours, nameBrigadier READONLY, totalWage, event
+    PROPERTIES(t) percent READONLY, nameEmployee2, percent2, nameEmployee3, percent3, nameEmployee4, percent4, descriptionText, totalHours, nameBrigadier READONLY, totalWage, event
     OBJECTS l = SharedTimeEntryLine
     PROPERTIES(l) nameWorkType, quantity, price, totalCost
-    PROPERTIES(l) NEW, DELETE;
-    //FILTERS event(l) = event(t);
+    PROPERTIES(l) NEW, DELETE
+    FILTERS event(l) = event(t) OR (event(t) == NULL);// Добавляем фильтрацию по событию
+
 
 DESIGN timeEntry {
     OBJECTS {
@@ -235,7 +253,7 @@ DESIGN timeEntry {
                 }
             }
 
-            // Панель для события (новое)
+            // Панель для события
             NEW eventPane {
                 horizontal = TRUE;
                 alignment = STRETCH;
@@ -260,9 +278,7 @@ DESIGN timeEntry {
     }
 }
 
-
-
-// Логика обновления Типа рабочего дня всех связанных отметок по событию
+// Логика обновления всех связанных записей при изменении данных
 WHEN CHANGED(type(TimeEntry t)) AND event(t) DO {
     FOR TimeEntry relatedEntry = TimeEntry DO {
         IF event(relatedEntry) = event(t) THEN {
@@ -271,9 +287,6 @@ WHEN CHANGED(type(TimeEntry t)) AND event(t) DO {
     }
 }
 
-
-
-// Логика обновления часов всех связанных отметок по событию
 WHEN CHANGED(totalHours(TimeEntry t)) AND event(t) DO {
     FOR TimeEntry relatedEntry = TimeEntry DO {
         IF event(relatedEntry) = event(t) THEN {
@@ -282,7 +295,6 @@ WHEN CHANGED(totalHours(TimeEntry t)) AND event(t) DO {
     }
 }
 
-// Логика обновления проекта для всех связанных отметок по событию
 WHEN CHANGED(project(TimeEntry t)) AND event(t) DO {
     FOR TimeEntry relatedEntry = TimeEntry DO {
         IF event(relatedEntry) = event(t) THEN {
@@ -419,6 +431,7 @@ copyTimeEntryForAdditionalEmployees (TimeEntry t) {
     }
 }
 
+
 // Копирование записей при создании новой отметки
 WHEN SET(TimeEntry t IS TimeEntry) DO {
     IF NOT event(t) THEN {
@@ -427,19 +440,23 @@ WHEN SET(TimeEntry t IS TimeEntry) DO {
             descriptionEvent(e) <- 'Создано событие для отметки времени';
         };
     }
-
     copyTimeEntryForAdditionalEmployees(t);
 }
 
 // Вычисляем зарплату для каждого сотрудника в зависимости от процента
 salary 'Зарплата' (TimeEntry t, Employee e) =
     CASE
-        WHEN e = employee(t) THEN totalWage(t) * (percent(t) / 100)
-        WHEN e = employee2(t) THEN totalWage(t) * (percent2(t) / 100)
-        WHEN e = employee3(t) THEN totalWage(t) * (percent3(t) / 100)
-        WHEN e = employee4(t) THEN totalWage(t) * (percent4(t) / 100)
-        ELSE 0;
+        WHEN e = employee(t) THEN totalWage(t) * percent(t) / 100
+        ELSE 0;  // Теперь считаем только для основного сотрудника
 
-// Свойство для вычисления общей зарплаты по всем отметкам времени
+
+
+
+
+// Свойство для вычисления общей зарплаты по всем отметкам времени для основного сотрудника
 totalSalary 'Общая зарплата' (Employee e, DATE d) =
-    GROUP SUM salary(t, e) IF date(t) = d AND (employee(t) = e OR employee2(t) = e OR employee3(t) = e OR employee4(t) = e);
+    GROUP SUM salary(t, e) IF date(t) = d AND employee(t) = e;  // Считаем только для основного сотрудника
+
+
+
+

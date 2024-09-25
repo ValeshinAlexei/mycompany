@@ -1,7 +1,7 @@
 MODULE TimesheetSupervisor;
 
 REQUIRE DateUtils, ProjectManagementSettings, Employee, Timesheet,
-        ProjectTimeEntry, ProjectAssignment, TimeEntryHours;
+        ProjectTimeEntry, ProjectAssignment, TimeEntryHours,TimeEntryExtensions;
 
 PRIORITY MasterData;
 
