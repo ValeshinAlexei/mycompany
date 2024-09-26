@@ -21,6 +21,9 @@ nameEmployee2 'Сотрудник 2' (TimeEntry t) = MasterData.name(employee2(t
 nameEmployee3 'Сотрудник 3' (TimeEntry t) = MasterData.name(employee3(t));
 nameEmployee4 'Сотрудник 4' (TimeEntry t) = MasterData.name(employee4(t));
 
+
+
+
 // Поле descriptionText
 descriptionText 'Описание' = DATA TEXT (TimeEntry);
 
@@ -78,7 +81,7 @@ percent(t) <- 100 - (percent2(t) + percent3(t) + percent4(t))
     AND (CHANGED(percent2(t)) OR CHANGED(percent3(t)) OR CHANGED(percent4(t)));
 
 // Удаляем логику автоматического суммирования и делаем поле totalHours редактируемым
-totalHours 'Часов' = DATA NUMERIC[16,3] (TimeEntry);
+totalHours 'Часов' = DATA NUMERIC[16,3] (TimeEntry) NONULL;
 hours(TimeEntry t) <- totalHours(t) WHEN CHANGED(totalHours(t));
 
 
@@ -98,31 +101,21 @@ event 'Событие отметки времени' = DATA TimeEntryEvent (Time
 event 'Событие строки' = DATA TimeEntryEvent (SharedTimeEntryLine);
 
 
+
+
 // Общая сумма по всем строкам (Итого ФОТ)
 totalWage 'Итого ФОТ' (TimeEntry t) =
     GROUP SUM totalCost(SharedTimeEntryLine l) IF event(l) = event(t);  // Фильтруем строки по событию
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-eventTimeEntry 'Событие отметки времени' = DATA TimeEntryEvent (TimeEntry);
-
 // Форма TimeEntry с отображением строк и суммы
 EXTEND FORM timeEntry
-    PROPERTIES(t) percent READONLY, nameEmployee2, percent2, nameEmployee3, percent3, nameEmployee4, percent4, descriptionText, totalHours, nameBrigadier READONLY, totalWage, event
+    PROPERTIES(t) percent READONLY, nameEmployee2, percent2, nameEmployee3, percent3, nameEmployee4, percent4, descriptionText, totalHours , nameBrigadier READONLY, totalWage, event
     OBJECTS l = SharedTimeEntryLine
-    PROPERTIES(l) nameWorkType, quantity, price, totalCost
+    // Скрываем кнопку добавления строки, если событие не назначено
     PROPERTIES(l) NEW, DELETE
+    PROPERTIES(l) nameWorkType, quantity, price, totalCost
+
     FILTERS event(l) = event(t) OR (event(t) == NULL);// Добавляем фильтрацию по событию
 
 
@@ -279,30 +272,19 @@ DESIGN timeEntry {
     }
 }
 
+
 // Логика обновления всех связанных записей при изменении данных
-WHEN CHANGED(type(TimeEntry t)) AND event(t) DO {
+WHEN CHANGED(type(TimeEntry t)) OR CHANGED(totalHours(t)) OR CHANGED(project(t)) OR CHANGED(date(t)) AND event(t) DO {
     FOR TimeEntry relatedEntry = TimeEntry DO {
         IF event(relatedEntry) = event(t) THEN {
             type(relatedEntry) <- type(t);
-        }
-    }
-}
-
-WHEN CHANGED(totalHours(TimeEntry t)) AND event(t) DO {
-    FOR TimeEntry relatedEntry = TimeEntry DO {
-        IF event(relatedEntry) = event(t) THEN {
             totalHours(relatedEntry) <- totalHours(t);
+            project(relatedEntry) <- project(t);
+            date(relatedEntry) <- date(t);  // Обновляем дату
         }
     }
 }
 
-WHEN CHANGED(project(TimeEntry t)) AND event(t) DO {
-    FOR TimeEntry relatedEntry = TimeEntry DO {
-        IF event(relatedEntry) = event(t) THEN {
-            project(relatedEntry) <- project(t);
-        }
-    }
-}
 
 // Логика обновления процентов для всех связанных отметок
 WHEN CHANGED(percent(TimeEntry t)) OR CHANGED(percent2(t)) OR CHANGED(percent3(t)) OR CHANGED(percent4(t))
@@ -368,69 +350,102 @@ WHEN CHANGED(percent(TimeEntry t)) OR CHANGED(percent2(t)) OR CHANGED(percent3(t
 
 
 
-
 // Процедура для копирования записи для дополнительных сотрудников
 copyTimeEntryForAdditionalEmployees (TimeEntry t) {
+    // Копируем отметку для сотрудника 2, если он назначен
     IF employee2(t) AND percent2(t) > 0 THEN {
         NEW newEntry = TimeEntry {
             date(newEntry) <- date(t);
             project(newEntry) <- project(t);
             totalHours(newEntry) <- totalHours(t);
+
+            // Ставим employee2 на первое место
             employee(newEntry) <- employee2(t);
-            event(newEntry) <- event(t); // Присваиваем событие исходной отметки
-            employee2(newEntry) <- employee(t);
+            event(newEntry) <- event(t);  // Присваиваем событие исходной отметки
+
+            // Копируем остальных сотрудников, сохраняя их позиции
+            employee2(newEntry) <- employee(t);  // Бригадир становится employee2
+            employee3(newEntry) <- employee3(t);
+            employee4(newEntry) <- employee4(t);
+
+            // Копируем проценты
+            percent(newEntry) <- percent2(t);
+            percent2(newEntry) <- percent(t);
+            percent3(newEntry) <- percent3(t);
+            percent4(newEntry) <- percent4(t);
+
+            // Копируем описание и другие данные
             type(newEntry) <- type(t);
             descriptionText(newEntry) <- descriptionText(t);
-            brigadier(newEntry) <- brigadier(t);
-            percent2(newEntry) <- percent(t);
-            percent(newEntry) <- percent2(t);
-            employee3(newEntry) <- employee3(t);
-            percent3(newEntry) <- percent3(t);
-            employee4(newEntry) <- employee4(t);
-            percent4(newEntry) <- percent4(t);
+            brigadier(newEntry) <- brigadier(t);  // Бригадир остаётся тем же
         }
     }
 
+    // Копируем отметку для сотрудника 3, если он назначен
     IF employee3(t) AND percent3(t) > 0 THEN {
         NEW newEntry = TimeEntry {
             date(newEntry) <- date(t);
             project(newEntry) <- project(t);
             totalHours(newEntry) <- totalHours(t);
+
+            // Ставим employee3 на первое место
             employee(newEntry) <- employee3(t);
-            event(newEntry) <- event(t); // Присваиваем событие исходной отметки
-            employee3(newEntry) <- employee(t);
+            event(newEntry) <- event(t);
+
+            // Копируем остальных сотрудников
+            employee2(newEntry) <- employee(t);  // Бригадир становится employee2
+            employee3(newEntry) <- employee2(t);
+            employee4(newEntry) <- employee4(t);
+
+            // Копируем проценты
+            percent(newEntry) <- percent3(t);
+            percent2(newEntry) <- percent(t);
+            percent3(newEntry) <- percent2(t);
+            percent4(newEntry) <- percent4(t);
+
+            // Копируем описание и другие данные
             type(newEntry) <- type(t);
             descriptionText(newEntry) <- descriptionText(t);
             brigadier(newEntry) <- brigadier(t);
-            percent3(newEntry) <- percent(t);
-            percent(newEntry) <- percent3(t);
-            employee2(newEntry) <- employee2(t);
-            percent2(newEntry) <- percent2(t);
-            employee4(newEntry) <- employee4(t);
-            percent4(newEntry) <- percent4(t);
         }
     }
 
+    // Копируем отметку для сотрудника 4, если он назначен
     IF employee4(t) AND percent4(t) > 0 THEN {
         NEW newEntry = TimeEntry {
             date(newEntry) <- date(t);
             project(newEntry) <- project(t);
             totalHours(newEntry) <- totalHours(t);
+
+            // Ставим employee4 на первое место
             employee(newEntry) <- employee4(t);
-            event(newEntry) <- event(t); // Присваиваем событие исходной отметки
-            employee4(newEntry) <- employee(t);
+            event(newEntry) <- event(t);
+
+            // Копируем остальных сотрудников
+            employee2(newEntry) <- employee(t);  // Бригадир становится employee2
+            employee3(newEntry) <- employee2(t);
+            employee4(newEntry) <- employee3(t);
+
+            // Копируем проценты
+            percent(newEntry) <- percent4(t);
+            percent2(newEntry) <- percent(t);
+            percent3(newEntry) <- percent2(t);
+            percent4(newEntry) <- percent3(t);
+
+            // Копируем описание и другие данные
             type(newEntry) <- type(t);
             descriptionText(newEntry) <- descriptionText(t);
             brigadier(newEntry) <- brigadier(t);
-            percent4(newEntry) <- percent(t);
-            percent(newEntry) <- percent4(t);
-            employee2(newEntry) <- employee2(t);
-            percent2(newEntry) <- percent2(t);
-            employee3(newEntry) <- employee3(t);
-            percent3(newEntry) <- percent3(t);
         }
     }
 }
+
+
+
+
+
+
+
 
 
 // Копирование записей при создании новой отметки
@@ -458,6 +473,15 @@ salary 'Зарплата' (TimeEntry t, Employee e) =
 totalSalary 'Общая зарплата' (Employee e, DATE d) =
     GROUP SUM salary(t, e) IF date(t) = d AND employee(t) = e;  // Считаем только для основного сотрудника
 
+// Ограничение: процент сотрудника не может быть 0, если сотрудник назначен
+CONSTRAINT employee2(t) AND percent2(t) = 0
+    MESSAGE 'Процент для сотрудника 2 не может быть равен 0, если сотрудник назначен';
+
+CONSTRAINT employee3(t) AND percent3(t) = 0
+    MESSAGE 'Процент для сотрудника 3 не может быть равен 0, если сотрудник назначен';
+
+CONSTRAINT employee4(t) AND percent4(t) = 0
+    MESSAGE 'Процент для сотрудника 4 не может быть равен 0, если сотрудник назначен';
 
 
 

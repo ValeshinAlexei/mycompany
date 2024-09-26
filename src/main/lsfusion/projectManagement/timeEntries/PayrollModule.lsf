@@ -1,0 +1,87 @@
+MODULE PayrollModule;
+
+REQUIRE Employee, DateUtils, TimeEntryExtensions;
+
+NAMESPACE Payroll;
+
+// Класс для записи зарплаты
+CLASS PayrollEntry 'Payroll Entry';
+
+// Сотрудник, за которого ведется учет зарплаты
+employee 'Employee' = DATA Employee (PayrollEntry) NONULL;
+nameEmployee 'Employee' (PayrollEntry p) = MasterData.name(employee(p));
+
+// Дата начисления зарплаты
+payrollDate 'Payroll Date' = DATA DATE (PayrollEntry);
+
+// Количество отработанных часов за период
+workedHours 'Worked Hours' (PayrollEntry p) =
+    GROUP SUM totalHours(TimeEntry t) IF employee(t) = employee(p) AND date(t) = payrollDate(p);
+
+// Зарплата за отработанные часы
+totalSalary 'Total Salary' (PayrollEntry p) =
+    GROUP SUM salary(TimeEntry t, employee(p)) IF date(t) = payrollDate(p);
+
+// Статусы зарплат
+CLASS PayrollStatus 'Payroll Status';
+nameStatus 'Status' = DATA STRING[50] (PayrollStatus);
+status 'Status' = DATA PayrollStatus (PayrollEntry);
+nameStatus 'Status' (PayrollEntry p) = nameStatus(status(p));
+
+// Предопределенные статусы
+paidStatus = GROUP AGGR PayrollStatus ps WHERE nameStatus(ps) = 'Выплачено';
+chargedStatus = GROUP AGGR PayrollStatus ps WHERE nameStatus(ps) = 'Начислено';
+retainedStatus = GROUP AGGR PayrollStatus ps WHERE nameStatus(ps) = 'Удержано';
+
+// Статус по умолчанию - Начислено
+WHEN LOCAL SET(PayrollEntry p IS PayrollEntry) DO status(p) <- chargedStatus();
+
+// Форма для отображения записей по зарплате
+FORM payrolls 'Payrolls'
+    OBJECTS p = PayrollEntry
+    PROPERTIES(p) payrollDate, nameEmployee, workedHours, totalSalary, nameStatus
+    PROPERTIES(p) NEW, EDIT, DELETE
+;
+
+DESIGN payrolls {
+    OBJECTS {
+        NEW header {
+            alignment = STRETCH;
+            horizontal = TRUE;
+            MOVE PROPERTY(payrollDate(p));
+            MOVE PROPERTY(nameEmployee(p));
+        }
+        MOVE BOX(p) {
+            caption = 'Payrolls';
+            PROPERTY(workedHours(p)) { caption = 'Hours Worked'; };
+            PROPERTY(totalSalary(p)) { caption = 'Total Salary'; };
+            PROPERTY(nameStatus(p)) { caption = 'Status'; };
+        }
+    }
+}
+
+// Добавление формы в навигатор
+NAVIGATOR {
+    NEW FOLDER payroll 'Payroll Management' WINDOW toolbar FIRST {
+        NEW FORM payrolls;
+    }
+}
+
+// Функция для создания записи о зарплате на основе данных TimeEntry
+createPayrollEntryForDateAndEmployee(DATE d, Employee e) {
+    NEW p = PayrollEntry {
+        payrollDate(p) <- d;
+        employee(p) <- e;
+    }
+}
+
+// Автоматическая генерация записей о зарплате для всех сотрудников на основе отметок времени
+generatePayrollEntries (DATE from, DATE to) {
+    FOR Employee e DO {
+        FOR DATE d = from DO {
+            IF GROUP SUM 1 IF date(TimeEntry t) = d AND employee(t) = e THEN {
+                createPayrollEntryForDateAndEmployee(d, e);
+            }
+        }
+    }
+}

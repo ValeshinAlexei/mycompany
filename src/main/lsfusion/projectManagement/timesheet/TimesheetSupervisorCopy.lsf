@@ -1,7 +1,7 @@
 MODULE TimesheetSupervisorCopy;
 
 REQUIRE DateUtils, ProjectManagementSettings, Employee, Timesheet,
-        ProjectTimeEntry, ProjectAssignment, TimeEntryHours, TimeEntryExtensions;
+        ProjectTimeEntry, ProjectAssignment, TimeEntryHours, TimeEntryExtensions, Security;
 
 PRIORITY MasterData;
 
@@ -12,9 +12,10 @@ salaryList 'Список зарплат' (Employee e, DATE d) =
     GROUP SUM totalSalary(e, d); // Используем свойство из TimeEntryExtensions
 
 // Новое свойство для объединения часов и зарплаты в одну строку
-summary 'Часы / Зарплата' (Employee e, DATE d) = hoursTimesheet(d, e) + 'ч'+ '/' + ROUND(salaryList(e, d)) + ' ₽';
+summary 'Часы / Зарплата' (Employee e, DATE d) = hoursTimesheet(d, e) + 'ч' + '/' + ROUND(salaryList(e, d)) + ' ₽';
 
-
+// Проверяем, является ли текущий пользователь администратором
+isAdmin 'Администратор?' (User u) = GROUP SUM 1 IF Security.userRoles(u) = 'admin';
 
 // Копия формы Supervisor timesheet
 FORM timesheetSupervisorCopy 'Зарплатный Табель'
@@ -29,10 +30,12 @@ FORM timesheetSupervisorCopy 'Зарплатный Табель'
     OBJECTS d = DATE
     FILTERS iterate(d, from(dates), to(dates))
 
+    // Отображаем только данные для текущего пользователя
     OBJECTS e = Employee
-    PROPERTIES(e) READONLY firstName, lastName, namePosition, rolesTimesheet
+    // Проверяем, если текущий пользователь НЕ администратор, то применяем фильтр
+    FILTERS IF NOT isAdmin(currentUser()) THEN e = currentUser()
 
-    // Отображение сводки с часами и зарплатой в каждой ячейке
+    PROPERTIES(e) READONLY firstName, lastName, namePosition, rolesTimesheet
     PROPERTIES summary(e, d) WAIT COLUMNS (d) HEADER extractDay(d) BACKGROUND backgroundHoursTimesheet(d, e)
 
     // Логика открытия формы с отметками при нажатии на ячейку
@@ -55,8 +58,9 @@ FORM timesheetSupervisorCopy 'Зарплатный Табель'
     ON CONTEXTMENU copyHours(d) ON CONTEXTMENU clearHours(d) FOOTER hours(d, timesheetProject())
 
     // Фильтры для отображения только тех сотрудников, которые назначены на проект
-    FILTERS assigned(timesheetProject(), e, dates) OR
-        (NOT countAssignments(timesheetProject()) AND NOT countAssignments(currentUser()))
+    // FILTERS assigned(timesheetProject(), e, dates) OR
+    //  (NOT countAssignments(timesheetProject()) AND NOT countAssignments(currentUser()))
+
 
     EVENTS ON INIT {
         timesheetProject() <- defaultProject(currentUser());
