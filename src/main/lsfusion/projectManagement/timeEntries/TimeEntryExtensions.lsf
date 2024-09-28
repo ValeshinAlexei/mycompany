@@ -4,8 +4,16 @@ REQUIRE TimeEntry, Project, ProjectTimeEntry, TimeEntryHours, ItemSales, Employe
 
 NAMESPACE ProjectManagement;
 
+
+// Инициализация сотрудника при создании новой записи
+employee(TimeEntry t) <- currentUser() WHEN SET(t IS TimeEntry);
+
+
+
 // Добавляем поле для связи с родительской отметкой
 parentEntry 'Родительская отметка' = DATA TimeEntry (TimeEntry);
+
+
 
 // Добавляем поля для процентов и дополнительных сотрудников
 percent 'Процент' = DATA NUMERIC[5,2] (TimeEntry);
@@ -439,11 +447,6 @@ copyTimeEntryForAdditionalEmployees (TimeEntry t) {
         }
     }
 }
-
-
-
-
-
 
 
 

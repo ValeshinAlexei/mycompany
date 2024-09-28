@@ -11,8 +11,18 @@ NAMESPACE ProjectManagement;
 salaryList 'Список зарплат' (Employee e, DATE d) =
     GROUP SUM totalSalary(e, d); // Используем свойство из TimeEntryExtensions
 
-// Новое свойство для объединения часов и зарплаты в одну строку
-summary 'Часы / Зарплата' (Employee e, DATE d) = hoursTimesheet(d, e) + 'ч' + '/' + ROUND(salaryList(e, d)) + ' ₽';
+// Свойство для подсчета суммы зарплаты за выбранный период
+salaryTotal 'Сумма зарплаты за период' (Employee e, INTERVAL[DATE] dates) =
+    GROUP SUM salaryList(e, d) IF d >= from(dates) AND d <= to(dates);
+
+// Свойство для подсчета часов за выбранный период
+hoursTotal 'Часы за период' (Employee e, INTERVAL[DATE] dates) =
+    GROUP SUM hoursTimesheet(d, e) IF d >= from(dates) AND d <= to(dates);
+
+
+// Свойство для объединения часов и зарплаты в одну строку
+summary 'Часы / Зарплата' (Employee e, DATE d) =
+    hoursTimesheet(d, e) + 'ч' + '/' + ROUND(salaryList(e, d)) + ' ₽';
 
 // Проверяем, является ли текущий пользователь администратором
 isAdmin 'Администратор?' (User u) = GROUP SUM 1 IF Security.userRoles(u) = 'admin';
@@ -30,43 +40,47 @@ FORM timesheetSupervisorCopy 'Зарплатный Табель'
     OBJECTS d = DATE
     FILTERS iterate(d, from(dates), to(dates))
 
-    // Отображаем только данные для текущего пользователя
+    // Отображаем всех сотрудников для администратора, а для обычных пользователей — только их записи
     OBJECTS e = Employee
-    // Проверяем, если текущий пользователь НЕ администратор, то применяем фильтр
     FILTERS IF NOT isAdmin(currentUser()) THEN e = currentUser()
 
-    PROPERTIES(e) READONLY firstName, lastName, namePosition, rolesTimesheet
+    PROPERTIES(e) READONLY firstName, lastName, namePosition
+    PROPERTIES salaryTotal(e, dates)READONLY,hoursTotal(e, dates) READONLY // Добавляем свойство в форму для отображения
     PROPERTIES summary(e, d) WAIT COLUMNS (d) HEADER extractDay(d) BACKGROUND backgroundHoursTimesheet(d, e)
+    
 
     // Логика открытия формы с отметками при нажатии на ячейку
     ON CHANGE {
+        // Логика изменения часов
         FOR TimeEntryType et = timesheetTimeEntryType() AND
             (timesheetProject() OR NOT project(timeEntry(d, e, et))) DO {
+
             IF NOT timesheetTimeEntryHours() THEN {
+                // Если часы не установлены, вводим новые
                 INPUT n = hoursTimesheet(d, e) DO {
                     changeSaveTimesheetHours(d, e, et, n, NULL, autoSaveTimesheetHours());
                 }
             } ELSE {
+                // Если часы уже есть, сохраняем их
                 changeSaveTimesheetHours(d, e, et, hours(timesheetTimeEntryHours()), timesheetTimeEntryHours(), autoSaveTimesheetHours());
             }
-        } ELSE {
-            // Вызов формы с отметками времени
-            SHOW timesheetSupervisorDateEmployee OBJECTS i = interval(d, d), e = e FLOAT;
         }
+
+        // Независимо от логики выше, всегда вызываем форму для просмотра отметок времени
+        SHOW timesheetSupervisorDateEmployee OBJECTS i = interval(d, d), e = e FLOAT;
     }
 
     ON CONTEXTMENU copyHours(d) ON CONTEXTMENU clearHours(d) FOOTER hours(d, timesheetProject())
 
-    // Фильтры для отображения только тех сотрудников, которые назначены на проект
-    // FILTERS assigned(timesheetProject(), e, dates) OR
-    //  (NOT countAssignments(timesheetProject()) AND NOT countAssignments(currentUser()))
-
+    // Фильтры для отображения отметок времени даже без проекта
+    FILTERS assigned(timesheetProject(), e, dates) OR NOT timesheetProject()
 
     EVENTS ON INIT {
         timesheetProject() <- defaultProject(currentUser());
         timesheetTimeEntryType() <- defaultTimeEntryType();
         SEEK timesheetSupervisorCopy.dates = interval(firstDayOfMonth(currentDate()), lastDayOfMonth(currentDate()));
     }
+
     PROPERTIES prevInterval '<' = { SEEK timesheetSupervisorCopy.dates = prevMonthInterval(dates); },
         nextInterval '>' = { SEEK timesheetSupervisorCopy.dates = nextMonthInterval(dates); }
 ;
