@@ -24,11 +24,30 @@ hoursTotal 'Часы за период' (Employee e, INTERVAL[DATE] dates) =
 summary 'Часы / Зарплата' (Employee e, DATE d) =
     hoursTimesheet(d, e) + 'ч' + '/' + ROUND(salaryList(e, d)) + ' ₽';
 
+
 // Проверяем, является ли текущий пользователь администратором
-isAdmin 'Администратор?' (User u) = GROUP SUM 1 IF Security.userRoles(u) = 'admin';
+isAdmin 'Администратор?' (User u) =
+    GROUP SUM 1 IF
+        (userRoles(u) = 'Администратор' OR userRoles(u) = 'admin');
+
+
 
 // Копия формы Supervisor timesheet
+// Форма Supervisor timesheet с отладкой ролей
 FORM timesheetSupervisorCopy 'Зарплатный Табель'
+
+    // Логика для вывода сообщения при инициализации формы
+    EVENTS ON INIT {
+        IF isAdmin(currentUser()) THEN {
+            MESSAGE 'Текущий пользователь является администратором.';
+        } ELSE {
+            MESSAGE 'Текущий пользователь не является администратором.';
+        }
+    }
+
+
+
+
     OBJECTS dates = INTERVAL[DATE] PANEL NULL
     PROPERTIES dates '' = VALUE(dates)
 
@@ -42,43 +61,16 @@ FORM timesheetSupervisorCopy 'Зарплатный Табель'
 
     // Отображаем всех сотрудников для администратора, а для обычных пользователей — только их записи
     OBJECTS e = Employee
-    FILTERS IF NOT isAdmin(currentUser()) THEN e = currentUser()
+    FILTERS IF isAdmin(currentUser()) THEN TRUE ELSE e = currentUser()
+
 
     PROPERTIES(e) READONLY firstName, lastName, namePosition
     PROPERTIES salaryTotal(e, dates)READONLY,hoursTotal(e, dates) READONLY // Добавляем свойство в форму для отображения
     PROPERTIES summary(e, d) WAIT COLUMNS (d) HEADER extractDay(d) BACKGROUND backgroundHoursTimesheet(d, e)
-    
 
-    // Логика открытия формы с отметками при нажатии на ячейку
-    ON CHANGE {
-        // Логика изменения часов
-        FOR TimeEntryType et = timesheetTimeEntryType() AND
-            (timesheetProject() OR NOT project(timeEntry(d, e, et))) DO {
-
-            IF NOT timesheetTimeEntryHours() THEN {
-                // Если часы не установлены, вводим новые
-                INPUT n = hoursTimesheet(d, e) DO {
-                    changeSaveTimesheetHours(d, e, et, n, NULL, autoSaveTimesheetHours());
-                }
-            } ELSE {
-                // Если часы уже есть, сохраняем их
-                changeSaveTimesheetHours(d, e, et, hours(timesheetTimeEntryHours()), timesheetTimeEntryHours(), autoSaveTimesheetHours());
-            }
-        }
-
-        // Независимо от логики выше, всегда вызываем форму для просмотра отметок времени
-        SHOW timesheetSupervisorDateEmployee OBJECTS i = interval(d, d), e = e FLOAT;
-    }
-
-    ON CONTEXTMENU copyHours(d) ON CONTEXTMENU clearHours(d) FOOTER hours(d, timesheetProject())
-
-    // Фильтры для отображения отметок времени даже без проекта
-    FILTERS assigned(timesheetProject(), e, dates) OR NOT timesheetProject()
-
+    // Отладка ролей
     EVENTS ON INIT {
-        timesheetProject() <- defaultProject(currentUser());
-        timesheetTimeEntryType() <- defaultTimeEntryType();
-        SEEK timesheetSupervisorCopy.dates = interval(firstDayOfMonth(currentDate()), lastDayOfMonth(currentDate()));
+        MESSAGE 'Текущие роли пользователя: ' + userRoles(currentUser());
     }
 
     PROPERTIES prevInterval '<' = { SEEK timesheetSupervisorCopy.dates = prevMonthInterval(dates); },
