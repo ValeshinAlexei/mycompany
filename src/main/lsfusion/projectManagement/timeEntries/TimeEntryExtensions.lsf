@@ -1,12 +1,17 @@
 MODULE TimeEntryExtensions;
 
-REQUIRE TimeEntry, Project, ProjectTimeEntry, TimeEntryHours, ItemSales, Employee, Category, ItemCost;
+REQUIRE TimeEntry, Project, ProjectTimeEntry, TimeEntryHours, ItemSales, Employee, Category, ItemCost, Security;
 
 NAMESPACE ProjectManagement;
 
 
 // Инициализация сотрудника при создании новой записи
 employee(TimeEntry t) <- currentUser() WHEN SET(t IS TimeEntry);
+
+
+// Проверяем, является ли текущий пользователь администратором
+isAdminT 'Администратор?' (User u) =
+    GROUP SUM 1 IF (userRoles(u) = 'Администратор' OR userRoles(u) = 'admin');
 
 
 
@@ -112,8 +117,16 @@ event 'Событие строки' = DATA TimeEntryEvent (SharedTimeEntryLine);
 
 
 // Общая сумма по всем строкам (Итого ФОТ)
-totalWage 'Итого ФОТ' (TimeEntry t) =
-    GROUP SUM totalCost(SharedTimeEntryLine l) IF event(l) = event(t);  // Фильтруем строки по событию
+totalWage 'Итого ФОТ' (TimeEntry t) = 
+    CASE
+        WHEN GROUP SUM totalCost(SharedTimeEntryLine l) IF event(l) = event(t) THEN
+        GROUP SUM totalCost(SharedTimeEntryLine l) IF event(l) = event(t)
+        ELSE 0
+;
+
+
+
+
 
 // Команда для создания события и привязки его к записи
 assignEvent (TimeEntry t) {
@@ -125,9 +138,25 @@ assignEvent (TimeEntry t) {
         } 
 }
 
+EXTEND FORM timeEntries
+
+    // Убираем определение объекта, используем уже существующий объект t
+    // Фильтрация: отображаем только записи текущего пользователя
+    FILTERS IF isAdminT(currentUser()) THEN TRUE ELSE employee(t) = currentUser()
+
+    ;
+
+
+
+
+
+
+
+
 // Форма TimeEntry с отображением строк и суммы
 EXTEND FORM timeEntry
-
+    // Добавляем сообщение при входе в систему
+    
     // Основные свойства формы
     PROPERTIES(t)
     percent READONLY,
@@ -136,7 +165,7 @@ EXTEND FORM timeEntry
         nameEmployee4, percent4,
         descriptionText,
         totalHours,  // Поле для ввода часов
-        nameBrigadier READONLY ,
+        nameBrigadier READONLY,
         totalWage,
         event  // Поле для отображения события
 
@@ -144,16 +173,18 @@ EXTEND FORM timeEntry
     OBJECTS l = SharedTimeEntryLine
 
     // Логика создания события только один раз при нажатии NEW
-    PROPERTIES(l) NEW, DELETE,nameWorkType, quantity, price, totalCost
+    PROPERTIES(l) NEW, DELETE, nameWorkType, quantity, price, totalCost
 
-        // Фильтр по событию
-    FILTERS event(l) = event(t) OR (event(t) == NULL)  // Добавляем фильтрацию по событию
-    // События формы
+    // Фильтрация строк по событию
+    FILTERS event(l) = event(t) OR (event(t) == NULL)
+
+        // События формы
     EVENTS
         ON INIT {
             assignEvent(t);  // Создаем событие при открытии формы
         }
 ;
+
 
 
 DESIGN timeEntry {
@@ -511,3 +542,9 @@ CONSTRAINT employee4(t) AND percent4(t) = 0
 
 
 
+// Свойство для проверки, является ли текущий пользователь бригадиром отметки
+//isBrigadier 'Бригадир?' (TimeEntry t, User u) =
+//   employee(t) = u OR brigadier(t) = u;
+
+
+    

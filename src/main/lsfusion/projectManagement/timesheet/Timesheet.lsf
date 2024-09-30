@@ -4,6 +4,7 @@ REQUIRE ProjectAssignment, ProjectTimeEntry, TimeEntryHours, Time;
 
 NAMESPACE ProjectManagement;
 
+
 autoSaveTimesheetHours 'Auto save timesheet hours' = DATA BOOLEAN ();
 EXTEND FORM options PROPERTIES() autoSaveTimesheetHours;
 
