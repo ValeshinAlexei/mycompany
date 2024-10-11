@@ -7,54 +7,40 @@ PRIORITY MasterData;
 
 NAMESPACE ProjectManagement;
 
-
 // Свойство для получения всех зарплатных сумм за день по каждому сотруднику
 salaryList 'Список зарплат' (Employee e, DATE d) =
-    GROUP SUM totalSalary(e, d); // Используем свойство из TimeEntryExtensions
-
+    GROUP SUM totalSalary(e, d);
 
 // Свойство для подсчета суммы зарплаты за выбранный период
 salaryTotal 'Сумма зарплаты за период' (Employee e, INTERVAL[DATE] dates) =
-    CASE
-        WHEN ROUND(GROUP SUM salaryList(e, d) IF d >= from(dates) AND d <= to(dates)) == NULL
-        THEN 0
-        ELSE ROUND(GROUP SUM salaryList(e, d) IF d >= from(dates) AND d <= to(dates));
-
-
+    ROUND(GROUP SUM salaryList(e, d) IF d >= from(dates) AND d <= to(dates));
 
 // Свойство для подсчета часов за выбранный период
 hoursTotal 'Часы за период' (Employee e, INTERVAL[DATE] dates) =
     GROUP SUM hoursTimesheet(d, e) IF d >= from(dates) AND d <= to(dates);
 
-// Свойство для отображения часов с учетом NULL
+// Свойство для отображения часов: если данных нет, возвращаем "0"
 hoursDisplay 'Отображаемые часы' (Employee e, DATE d) =
-    CASE
-        WHEN hoursTimesheet(d, e) = NULL THEN 0
-        ELSE hoursTimesheet(d, e);
+    IF hoursTimesheet(d, e) THEN STRING(hoursTimesheet(d, e)) ELSE '0';
 
-// Свойство для отображения зарплаты с учетом NULL
+// Свойство для отображения зарплаты: если данных нет, возвращаем "0"
 salaryDisplay 'Отображаемая зарплата' (Employee e, DATE d) =
-    CASE
-        WHEN salaryList(e, d) = NULL THEN 0
-        ELSE ROUND(salaryList(e, d));
+    IF salaryList(e, d) THEN STRING(salaryList(e, d)) ELSE '0';
+
+// Свойство для проверки наличия отметки времени
+existsTimeEntry 'Отметка времени существует' (Employee e, DATE d) =
+    GROUP SUM 1 IF timeEntry(d, e);
+
 
 // Объединяющее свойство для отображения в ячейке "Часы / Зарплата"
 summary 'Часы / Зарплата' (Employee e, DATE d) =
-    CASE
-        // Если и часы, и зарплата равны 0
-        WHEN hoursDisplay(e, d) = 0 AND salaryDisplay(e, d) = 0
-        THEN '0ч / 0 ₽'
+    IF existsTimeEntry(e, d) THEN
+        STRING(IF hoursTimesheet(d, e) THEN hoursTimesheet(d, e) ELSE 0) + ' ч / ' +
+            STRING(ROUND(IF salaryList(e, d) THEN salaryList(e, d) ELSE 0, 0)) + ' ₽'
+    ELSE
+        NULL;
 
-        // Если часы равны 0, а зарплата есть
-        WHEN hoursDisplay(e, d) = 0
-        THEN '0ч / ' + STRING(salaryDisplay(e, d)) + ' ₽'
 
-        // Если зарплата равна 0, а часы есть
-        WHEN salaryDisplay(e, d) = 0
-        THEN STRING(hoursDisplay(e, d)) + 'ч / 0 ₽'
-
-        // Если есть и часы, и зарплата
-        ELSE STRING(hoursDisplay(e, d)) + 'ч / ' + STRING(salaryDisplay(e, d)) + ' ₽';
 
 
 
@@ -62,12 +48,8 @@ summary 'Часы / Зарплата' (Employee e, DATE d) =
 isAdmin 'Администратор?' (User u) =
     GROUP SUM 1 IF (userRoles(u) = 'Администратор' OR userRoles(u) = 'admin');
 
-
-
-
 // Копия формы Supervisor timesheet
 FORM timesheetSupervisorCopy 'Зарплатный Табель'
-
     OBJECTS dates = INTERVAL[DATE] PANEL NULL
     PROPERTIES dates '' = VALUE(dates)
 
@@ -84,14 +66,24 @@ FORM timesheetSupervisorCopy 'Зарплатный Табель'
     FILTERS IF isAdmin(currentUser()) THEN TRUE ELSE e = currentUser()
 
     PROPERTIES(e) READONLY firstName, lastName, namePosition
-    PROPERTIES salaryTotal(e, dates) READONLY, hoursTotal(e, dates) READONLY // Добавляем свойство в форму для отображения
+    PROPERTIES salaryTotal(e, dates) READONLY, hoursTotal(e, dates) READONLY
     PROPERTIES summary(e, d) WAIT COLUMNS (d) HEADER extractDay(d) BACKGROUND backgroundHoursTimesheet(d, e)
 
-    // Логика открытия формы с отметками при клике на ячейку
+    // Вызов формы при изменении значения (аналогично оригиналу)
     ON CHANGE {
-        // Открываем форму для просмотра отметок времени выбранного сотрудника
+        FOR TimeEntryType et = timesheetTimeEntryType() AND (timesheetProject() OR NOT project(timeEntry(d, e, timesheetTimeEntryType()))) DO {
+            IF NOT timesheetTimeEntryHours() THEN {
+                INPUT n = hoursTimesheet(d, e) DO {
+                    changeSaveTimesheetHours(d, e, et, n, NULL, autoSaveTimesheetHours());
+                }
+            } ELSE
+                changeSaveTimesheetHours(d, e, et, hours(timesheetTimeEntryHours()), timesheetTimeEntryHours(), autoSaveTimesheetHours());
+        } ELSE
         SHOW timesheetSupervisorDateEmployee OBJECTS i = interval(d, d), e = e FLOAT;
     }
+
+    // Контекстное меню для дополнительных действий (аналогично оригиналу)
+    ON CONTEXTMENU copyHours(d) ON CONTEXTMENU clearHours(d)
 
     PROPERTIES prevInterval '<' = { SEEK timesheetSupervisorCopy.dates = prevMonthInterval(dates); },
         nextInterval '>' = { SEEK timesheetSupervisorCopy.dates = nextMonthInterval(dates); }
@@ -130,22 +122,24 @@ DESIGN timesheetSupervisorCopy {
                 }
                 MOVE BOX(e) {
                     caption = '';
+                    grid = TRUE;  // Добавляем отображение в виде сетки
+                    lines = 1;  // Устанавливаем количество линий в сетке (для выделения)
                     PROPERTY(summary(e, d)) {
                         width = 100;
                         height = 40;
                         charWidth = 10;
                         charHeight = 5;
-                        // Настройка шрифта и фона
-                        fontSize = 14;  // Размер шрифта
-                        fontStyle = 'bold';  // Делаем шрифт жирным
-                        foreground = RGB(0, 0, 0);  // Цвет текста — чёрный
-
+                        fontSize = 14;
+                        foreground = RGB(0, 0, 0);  // Черный цвет текста
+                        valueTooltip = 'Тип: ' + nameType(timeEntry(d, e));  // Добавляем подсказку
                     }
                 }
             }
         }
     }
 }
+
+
 
 // Навигатор для копии формы
 NAVIGATOR {

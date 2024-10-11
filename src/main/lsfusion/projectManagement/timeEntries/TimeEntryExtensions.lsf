@@ -117,7 +117,7 @@ event 'Событие строки' = DATA TimeEntryEvent (SharedTimeEntryLine);
 
 
 // Общая сумма по всем строкам (Итого ФОТ)
-totalWage 'Итого ФОТ' (TimeEntry t) = 
+totalWage 'Итого ФОТ' (TimeEntry t) =
     CASE
         WHEN GROUP SUM totalCost(SharedTimeEntryLine l) IF event(l) = event(t) THEN
         GROUP SUM totalCost(SharedTimeEntryLine l) IF event(l) = event(t)
@@ -135,7 +135,7 @@ assignEvent (TimeEntry t) {
             event(t) <- e;  // Привязываем событие к записи TimeEntry
             descriptionEvent(e) <- 'Событие создано';
         };
-        } 
+    }
 }
 
 EXTEND FORM timeEntries
@@ -144,7 +144,7 @@ EXTEND FORM timeEntries
     // Фильтрация: отображаем только записи текущего пользователя
     FILTERS IF isAdminT(currentUser()) THEN TRUE ELSE employee(t) = currentUser()
 
-    ;
+;
 
 
 
@@ -156,7 +156,7 @@ EXTEND FORM timeEntries
 // Форма TimeEntry с отображением строк и суммы
 EXTEND FORM timeEntry
     // Добавляем сообщение при входе в систему
-    
+
     // Основные свойства формы
     PROPERTIES(t)
     percent READONLY,
@@ -178,7 +178,7 @@ EXTEND FORM timeEntry
     // Фильтрация строк по событию
     FILTERS event(l) = event(t) OR (event(t) == NULL)
 
-        // События формы
+    // События формы
     EVENTS
         ON INIT {
             assignEvent(t);  // Создаем событие при открытии формы
