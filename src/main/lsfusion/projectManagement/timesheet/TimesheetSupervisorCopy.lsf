@@ -1,11 +1,15 @@
 MODULE TimesheetSupervisorCopy;
 
-REQUIRE DateUtils, ProjectManagementSettings, Employee, Timesheet,
+REQUIRE DateUtils, ProjectManagementSettings, Employee, Timesheet,TimesheetSupervisor,
         ProjectTimeEntry, ProjectAssignment, TimeEntryHours, TimeEntryExtensions, Security;
 
 PRIORITY MasterData;
 
 NAMESPACE ProjectManagement;
+
+
+
+
 
 // Свойство для получения всех зарплатных сумм за день по каждому сотруднику
 salaryList 'Список зарплат' (Employee e, DATE d) =
@@ -50,7 +54,8 @@ isAdmin 'Администратор?' (User u) =
 
 // Копия формы Supervisor timesheet
 FORM timesheetSupervisorCopy 'Зарплатный Табель'
-    OBJECTS dates = INTERVAL[DATE] PANEL NULL
+        OBJECTS dates = INTERVAL[DATE] PANEL NULL
+    
     PROPERTIES dates '' = VALUE(dates)
 
     PROPERTIES() nameTimesheetProject, nameTimesheetTimeEntryType SELECT 'buttonGroup',
@@ -64,7 +69,13 @@ FORM timesheetSupervisorCopy 'Зарплатный Табель'
     // Отображаем всех сотрудников для администратора, а для обычных пользователей — только их записи
     OBJECTS e = Employee
     FILTERS IF isAdmin(currentUser()) THEN TRUE ELSE e = currentUser()
-
+    
+    //фильтр для показа только активных сотрудников
+    FILTERGROUP activeEmployees
+        FILTER '{Active}' active(e) 'F10' DEFAULT
+        FILTER 'Archived' archived(e) 'F9'
+    
+    
     PROPERTIES(e) READONLY firstName, lastName, namePosition
     PROPERTIES salaryTotal(e, dates) READONLY, hoursTotal(e, dates) READONLY
     PROPERTIES summary(e, d) WAIT COLUMNS (d) HEADER extractDay(d) BACKGROUND backgroundHoursTimesheet(d, e)
@@ -151,3 +162,12 @@ NAVIGATOR {
 // Логика для установки значений при изменении типа отметки времени
 WHEN LOCAL FORMS timesheetSupervisorCopy CHANGED(timesheetTimeEntryType()) DO
     timesheetTimeEntryHours() <- defaultHours(timesheetTimeEntryType());
+
+
+// Расширение формы TimesheetSupervisor для добавления группы фильтров по активности сотрудников
+EXTEND FORM timesheetSupervisor
+    FILTERGROUP activeEmployees
+        FILTER '{Active}' active(e) 'F10' DEFAULT  // Фильтр для активных сотрудников (по умолчанию)
+        FILTER 'Archived' archived(e) 'F9'         // Фильтр для архивированных сотрудников
+;
+

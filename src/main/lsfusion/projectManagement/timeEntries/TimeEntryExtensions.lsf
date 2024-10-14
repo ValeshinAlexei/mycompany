@@ -32,13 +32,13 @@ isAdminT 'Администратор?' (User u) =
 parentEntry 'Родительская отметка' = DATA TimeEntry (TimeEntry);
 
 // Добавляем поля для процентов и дополнительных сотрудников
-percent 'Процент' = DATA NUMERIC[5,2] (TimeEntry);
+percent '%' = DATA NUMERIC[5,2] (TimeEntry);
 employee2 'Сотрудник 2' = DATA Employee (TimeEntry);
-percent2 'Процент 2' = DATA NUMERIC[5,2] (TimeEntry) NONULL;
+percent2 '%' = DATA NUMERIC[5,2] (TimeEntry) NONULL;
 employee3 'Сотрудник 3' = DATA Employee (TimeEntry);
-percent3 'Процент 3' = DATA NUMERIC[5,2] (TimeEntry) NONULL;
+percent3 '%' = DATA NUMERIC[5,2] (TimeEntry) NONULL;
 employee4 'Сотрудник 4' = DATA Employee (TimeEntry);
-percent4 'Процент 4' = DATA NUMERIC[5,2] (TimeEntry) NONULL;
+percent4 '%' = DATA NUMERIC[5,2] (TimeEntry) NONULL;
 
 // Уникальные имена для дополнительных сотрудников
 nameEmployee2 'Сотрудник 2' (TimeEntry t) = MasterData.name(employee2(t));
@@ -348,10 +348,11 @@ EVENTS
     };
 
 // DESIGN формы timeEntry
+// DESIGN формы timeEntry
 DESIGN timeEntry {
     OBJECTS {
         MOVE pane {
-            REMOVE PROPERTY(hours(t)); // Удалили старую логику часов
+            REMOVE PROPERTY(hours(t));  // Удалили старую логику часов
             REMOVE PROPERTY(nameTimeEntryHours(t));
             REMOVE PROPERTY(description(t));
 
@@ -360,15 +361,15 @@ DESIGN timeEntry {
                 horizontal = TRUE;
                 alignment = STRETCH;
                 MOVE PROPERTY(nameEmployee(t)) {
-                    captionWidth = 100;
-                    valueWidth = 145;
+                    captionWidth = 80;  // Уменьшаем ширину подписи
+                    valueWidth = 100;   // Задаем ширину значения
+                    flex = 1;           // Даем возможность расширяться
                     alignment = START;
-                    caption = IF brigadier(t) = employee(t) THEN 'Бригадир' ELSE 'Сотрудник 1';
                 }
                 MOVE PROPERTY(percent(t)) {
-                    caption = '%';
-                    captionWidth = 20;
-                    valueWidth = 55;
+                    captionWidth = 10;  // Уменьшаем ширину подписи для процента
+                    valueWidth = 20;    // Задаем ширину для процента
+                    flex = 1;           // Процент тоже будет расширяться
                     alignment = START;
                 }
             }
@@ -378,14 +379,15 @@ DESIGN timeEntry {
                 horizontal = TRUE;
                 alignment = STRETCH;
                 MOVE PROPERTY(nameEmployee2(t)) {
-                    captionWidth = 100;
-                    valueWidth = 150;
+                    captionWidth = 80;
+                    valueWidth = 100;
+                    flex = 1;
                     alignment = START;
                 }
                 MOVE PROPERTY(percent2(t)) {
-                    caption = '%';
-                    captionWidth = 20;
-                    valueWidth = 50;
+                    captionWidth = 10;
+                    valueWidth = 20;
+                    flex = 1;
                     alignment = START;
                 }
             }
@@ -395,14 +397,15 @@ DESIGN timeEntry {
                 horizontal = TRUE;
                 alignment = STRETCH;
                 MOVE PROPERTY(nameEmployee3(t)) {
-                    captionWidth = 100;
-                    valueWidth = 150;
+                    captionWidth = 80;
+                    valueWidth = 100;
+                    flex = 1;
                     alignment = START;
                 }
                 MOVE PROPERTY(percent3(t)) {
-                    caption = '%';
-                    captionWidth = 20;
-                    valueWidth = 50;
+                    captionWidth = 10;
+                    valueWidth = 20;
+                    flex = 1;
                     alignment = START;
                 }
             }
@@ -412,14 +415,15 @@ DESIGN timeEntry {
                 horizontal = TRUE;
                 alignment = STRETCH;
                 MOVE PROPERTY(nameEmployee4(t)) {
-                    captionWidth = 100;
-                    valueWidth = 150;
+                    captionWidth = 80;
+                    valueWidth = 100;
+                    flex = 1;
                     alignment = START;
                 }
                 MOVE PROPERTY(percent4(t)) {
-                    caption = '%';
-                    captionWidth = 20;
-                    valueWidth = 50;
+                    captionWidth = 10;
+                    valueWidth = 20;
+                    flex = 1;
                     alignment = START;
                 }
             }
@@ -429,9 +433,9 @@ DESIGN timeEntry {
                 horizontal = TRUE;
                 alignment = STRETCH;
                 MOVE PROPERTY(totalWorkHours(t)) {  // Новое свойство для отображения суммы часов
-                    caption = 'Часов';
-                    captionWidth = 100;
+                    captionWidth = 80;
                     valueWidth = 150;
+                    flex = 1;
                     alignment = CENTER;
                 }
             }
@@ -441,59 +445,52 @@ DESIGN timeEntry {
                 horizontal = TRUE;
                 alignment = STRETCH;
                 MOVE PROPERTY(date(t)) {
-                    caption = 'Дата';
-                    captionWidth = 100;
-                    valueWidth = 150;
+                    captionWidth = 80;
+                    valueWidth = 100;
+                    flex = 1;
                     alignment = START;
                 }
                 MOVE PROPERTY(nameType(t)) {
-                    caption = 'Тип';
-                    captionWidth = 100;
-                    valueWidth = 150;
+                    captionWidth = 80;
+                    valueWidth = 100;
+                    flex = 1;
                     alignment = START;
                 }
             }
 
             // Поле для описания работы
             MOVE PROPERTY(descriptionText(t)) {
-                captionWidth = 100;
-                valueWidth = 450;
-                height = 100;  // Убедитесь, что высота установлена
+                captionWidth = 80;
+                valueWidth = 450;  // Оставляем большое поле для описания
+                height = 100;      // Высота установлена
                 alignment = STRETCH;
             }
-
-
 
             // Панель для строк вида работ
             MOVE BOX(w) {
                 caption = 'Вид работ';
                 height = 300;  // Задаем фиксированную высоту
                 PROPERTY(startTime(w)) {
-                    caption = 'Начало';
                     captionWidth = 50;
                     valueWidth = 50;
                     charHeight = 2;
                 }
                 PROPERTY(endTime(w)) {
-                    caption = 'Окончание';
                     captionWidth = 50;
                     valueWidth = 50;
                     charHeight = 2;
                 }
                 PROPERTY(description(w)) {
-                    caption = 'Описание';
                     captionWidth = 150;
                     valueWidth = 300;
                     charHeight = 2;
                 }
                 PROPERTY(workHours(w)) {
-                    caption = 'Часы работы';
                     captionWidth = 100;
                     valueWidth = 100;
                     charHeight = 2;
                 }
             }
-
 
             // Панель для отображения информации о зарплате
             MOVE BOX(l) {
@@ -506,19 +503,22 @@ DESIGN timeEntry {
 
             // Отображение события
             MOVE PROPERTY(event(t)) {
-                caption = 'Событие';
-                captionWidth = 100;
+                captionWidth = 80;
                 valueWidth = 150;
             }
 
             // Отображение общей суммы по зарплате
             MOVE PROPERTY(totalWage(t)) {
-                caption = 'Итого ФОТ';
-                captionWidth = 100;
+                captionWidth = 80;
                 valueWidth = 150;
                 alignment = END;
             }
         }
     }
 }
+
+
+
+
+
 
