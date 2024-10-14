@@ -90,6 +90,7 @@ FORM timesheetSupervisorCopy 'Зарплатный Табель'
 ;
 
 // Оформление копии формы timesheetSupervisorCopy
+// Оформление копии формы timesheetSupervisorCopy
 DESIGN timesheetSupervisorCopy {
     OBJECTS {
         NEW header {
@@ -122,22 +123,21 @@ DESIGN timesheetSupervisorCopy {
                 }
                 MOVE BOX(e) {
                     caption = '';
-                    grid = TRUE;  // Добавляем отображение в виде сетки
-                    lines = 1;  // Устанавливаем количество линий в сетке (для выделения)
                     PROPERTY(summary(e, d)) {
                         width = 100;
                         height = 40;
                         charWidth = 10;
                         charHeight = 5;
-                        fontSize = 14;
-                        foreground = RGB(0, 0, 0);  // Черный цвет текста
-                        valueTooltip = 'Тип: ' + nameType(timeEntry(d, e));  // Добавляем подсказку
+                        // Настройка шрифта и фона
+                                               foreground = RGB(0, 0, 0);  // Цвет текста — чёрный
+
                     }
                 }
             }
         }
     }
 }
+
 
 
 

@@ -6,13 +6,15 @@ NAMESPACE ProjectManagement;
 
 // Класс для строк описания времени работы
 CLASS WorkEntryLine;
+// Связываем событие TimeEntryEvent с TimeEntry
+entryEvent 'Отметка времени (событие)' = DATA TimeEntry (TimeEntryEvent);
 
 // Свойства: начало работы, конец работы, описание
 startTime 'Начало работы' = DATA TIME (WorkEntryLine);
 endTime 'Окончание работы' = DATA TIME (WorkEntryLine);
 description 'Описание работы' = DATA TEXT (WorkEntryLine);
 
-// Рассчитываем количество часов работы
+// Рассчитываем количество часов работы 
 workHours 'Часы работы' = NUMERIC[16,2] 
     ((extractHour(endTime(w)) * 3600 + extractMinute(endTime(w)) * 60 + extractSecond(endTime(w))) -
         (extractHour(startTime(w)) * 3600 + extractMinute(startTime(w)) * 60 + extractSecond(startTime(w)))) / 3600
@@ -90,10 +92,9 @@ descriptionEvent 'Описание события' = DATA TEXT (TimeEntryEvent);
 
 
 // Проверка на уникальность сотрудников в записи времени
-CONSTRAINT
-    employee2(t) = employee(t) OR
-        employee3(t) = employee(t) OR employee3(t) = employee2(t) OR
-        employee4(t) = employee(t) OR employee4(t) = employee2(t) OR employee4(t) = employee3(t)
+CONSTRAINT employee2(t) = employee(t) OR
+    employee3(t) = employee(t) OR employee3(t) = employee2(t) OR
+    employee4(t) = employee(t) OR employee4(t) = employee2(t) OR employee4(t) = employee3(t)
     MESSAGE 'Сотрудники не могут быть одинаковыми в одной записи времени';
 
 // Проверка: сумма процентов сотрудников 2, 3 и 4 не должна превышать 100%
@@ -125,7 +126,6 @@ nameBrigadier 'Бригадир' (TimeEntry t) = MasterData.name(brigadier(t));
 
 // Логика назначения события
 event 'Событие отметки времени' = DATA TimeEntryEvent (TimeEntry);
-event 'Событие строки' = DATA TimeEntryEvent (WorkEntryLine); // Привязываем событие к строкам "Вид работ"
 
 // Суммируем общее количество часов по строкам WorkEntryLine для TimeEntry
 totalWorkHours 'Общее количество рабочих часов' (TimeEntry t) =
@@ -150,23 +150,18 @@ assignEvent (TimeEntry t) {
     }
 }
 
-// Связываем событие TimeEntryEvent с TimeEntry
-entryEvent 'Отметка времени (событие)' = DATA TimeEntry (TimeEntryEvent);
+// Создайте событие сразу при создании TimeEntry
+WHEN SET(TimeEntry t IS TimeEntry) DO {
+    assignEvent(t);
+}
+
+
 
 
 
 
 // Определяем функцию для получения текущей записи TimeEntry
 currentTimeEntry() = DATA TimeEntry(); // В контексте вашей логики это может быть любая логика получения текущей записи
-
-
-// Привязываем строку WorkEntryLine к записи TimeEntry при ее создании
-WHEN SET(workEntry(w)) DO {
-    IF workEntry(w) == NULL THEN {
-        workEntry(w) <- currentTimeEntry();
-    }
-}
-
 
 
 
@@ -199,7 +194,7 @@ EXTEND FORM timeEntries
 
 
 
-// Логика обновления всех связанных записей при изменении данных
+
 // Логика обновления всех связанных записей при изменении данных
 WHEN CHANGED(type(TimeEntry t)) OR CHANGED(project(t)) OR CHANGED(date(t)) AND event(t) DO {
     FOR TimeEntry relatedEntry = TimeEntry DO {
@@ -463,41 +458,42 @@ DESIGN timeEntry {
             MOVE PROPERTY(descriptionText(t)) {
                 captionWidth = 100;
                 valueWidth = 450;
-                charWidth = 40;
-                charHeight = 5;
+                height = 100;  // Убедитесь, что высота установлена
                 alignment = STRETCH;
-                flex = 1;
             }
+
+
 
             // Панель для строк вида работ
             MOVE BOX(w) {
                 caption = 'Вид работ';
+                height = 300;  // Задаем фиксированную высоту
                 PROPERTY(startTime(w)) {
                     caption = 'Начало';
                     captionWidth = 50;
                     valueWidth = 50;
-                    height = 25;
+                    charHeight = 2;
                 }
                 PROPERTY(endTime(w)) {
                     caption = 'Окончание';
                     captionWidth = 50;
                     valueWidth = 50;
-                    height = 25;
+                    charHeight = 2;
                 }
                 PROPERTY(description(w)) {
                     caption = 'Описание';
                     captionWidth = 150;
                     valueWidth = 300;
-                    charHeight = 1;
-                    height = 25;
+                    charHeight = 2;
                 }
                 PROPERTY(workHours(w)) {
-                    caption = 'Часы работы';  // Поле для ввода количества часов работы
+                    caption = 'Часы работы';
                     captionWidth = 100;
                     valueWidth = 100;
-                    height = 25;
+                    charHeight = 2;
                 }
             }
+
 
             // Панель для отображения информации о зарплате
             MOVE BOX(l) {
@@ -525,3 +521,4 @@ DESIGN timeEntry {
         }
     }
 }
+
