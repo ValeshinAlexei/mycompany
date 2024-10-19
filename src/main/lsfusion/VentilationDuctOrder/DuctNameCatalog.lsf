@@ -1,0 +1,16 @@
+MODULE DuctNameCatalog;
+
+CLASS DuctName 'Наименование изделия';    // Создание класса для справочника наименований
+name 'Наименование' = DATA BPSTRING[100] (DuctName);
+
+// Форма для работы с наименованиями изделий
+FORM ductNames 'Список наименований изделий'
+    OBJECTS d = DuctName
+    PROPERTIES(d) name
+    PROPERTIES(d) NEWSESSION NEW, DELETE, EDIT
+;
+
+// Добавление формы в навигатор
+NAVIGATOR {
+    NEW ductNames FIRST;
+}
