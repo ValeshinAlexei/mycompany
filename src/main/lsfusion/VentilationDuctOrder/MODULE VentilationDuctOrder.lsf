@@ -23,8 +23,9 @@ orderEvent 'Событие заказа' = DATA OrderEvent (Order) NONULL;
 // Поля для строк заказа
 event 'Событие строки' = DATA OrderEvent (OrderLine) NONULL DELETE;
 
-// Новые поля для строк заказа
-ductName 'Наименование изделия' = DATA BPSTRING[100] (OrderLine);
+// Изменение на использование каталога DuctName для наименований изделий
+ductName 'Наименование изделия' = DATA DuctName (OrderLine);  // Изменено для ссылки на объект DuctName
+
 ductDimensions1 'D1,A,B мм' = DATA BPSTRING[100] (OrderLine);
 ductDimensions2 'D2,C,D мм' = DATA BPSTRING[100] (OrderLine);
 ductMaterial 'Материал' = DATA BPSTRING[100] (OrderLine);
@@ -84,9 +85,10 @@ FORM order 'Заказ на вентиляционные трубы'
 // Форма для редактирования строки заказа
 FORM orderLine 'Строка заказа на вентиляционные трубы'
     OBJECTS l = OrderLine PANEL
+    // Обновляем форму для выбора наименования изделия из каталога
     PROPERTIES(l) ductName, ductDimensions1, ductDimensions2, ductMaterial, ductThickness,
-        ductQuantity,   ductArea, ductDiscount, connectionType1, connectionType2, extraRigidity
-EDIT OrderLine OBJECT l
+        ductQuantity, ductArea, ductDiscount, connectionType1, connectionType2, extraRigidity
+    EDIT OrderLine OBJECT l
     EVENTS
         ON INIT {
             IF currentOrder() THEN {
@@ -103,89 +105,84 @@ FORM orders 'Заказы на вентиляционные трубы'
 ;
 
 
+// Дизайн формы строки заказа
 DESIGN orderLine {
-           
-        NEW orderL {
-        horizontal = TRUE;  // Главный контейнер горизонтальный
-        fill = 1;           // Заполняет всю доступную ширину формы
+    NEW orderL {
+        horizontal = TRUE;
+        fill = 1;
+        flex = 100;
 
         // Центральный контейнер (Контейнеры 1, 2, 3 и 4)
         NEW centerPane {
-            horizontal = TRUE; // Горизонтальный контейнер для параметров и изображения
+            horizontal = TRUE;
             flex = 1;
-            fill = 1; // Этот контейнер будет больше, чем левый
+            fill = 1;
 
             // Левый контейнер (Категория - контейнер 1)
             NEW leftPane {
-                horizontal = FALSE; // Вертикальный контейнер для категорий
-                MOVE PROPERTY(ductName(l)); // Наименование изделия
-                flex = 1;  // Контейнер расширяемый
+                horizontal = FALSE;
+                MOVE PROPERTY(ductName(l)); // Обновлено для использования каталога
+                flex = 1;
+                fill = 1;
             }
 
-            // Первый блок - параметры изделия (Контейнер 2)
+            // Блок параметров изделия (Контейнер 2)
             NEW dimensionsPane {
-                horizontal = FALSE; // Вертикальный контейнер
-                MOVE PROPERTY(ductDimensions1(l));  // D1, A, B мм
-                MOVE PROPERTY(ductDimensions2(l));  // D2, C, D мм
-                MOVE PROPERTY(ductQuantity(l));     // Количество
-                MOVE PROPERTY(ductMaterial(l));     // Материал
-                MOVE PROPERTY(ductThickness(l));     // Толщина
-                MOVE PROPERTY(ductDiscount(l));     // Скидка
-                flex = 1;  // Блок растягивается на всю ширину
+                horizontal = FALSE;
+                MOVE PROPERTY(ductDimensions1(l));
+                MOVE PROPERTY(ductDimensions2(l));
+                MOVE PROPERTY(ductQuantity(l));
+                MOVE PROPERTY(ductMaterial(l));
+                MOVE PROPERTY(ductThickness(l));
+                MOVE PROPERTY(ductDiscount(l));
+                flex = 1;
+                fill = 1;
             }
 
-            // Второй блок - Placeholder для изображения (Контейнер 3)
+            // Placeholder для изображения (Контейнер 3)
             NEW imagePane {
-                horizontal = FALSE; // Вертикальный контейнер
-                MOVE PROPERTY(ductArea(l)); // Placeholder для изображения (пока площадь)
-                flex = 1;  // Растягиваем на оставшуюся ширину
+                horizontal = FALSE;
+                MOVE PROPERTY(ductArea(l));
+                flex = 1;
+                fill = 1;
             }
 
-            // Правый контейнер (Контейнер 4)
+            // Правый контейнер для соединений (Контейнер 4)
             NEW rightPane {
-                horizontal = FALSE; // Вертикальный контейнер для соединений
-                MOVE PROPERTY(connectionType1(l));  // Свойство "Вид соединения 1"
-                MOVE PROPERTY(connectionType2(l));  // Свойство "Вид соединения 2"
-                MOVE PROPERTY(extraRigidity(l));    // Свойство "Доп. жесткость"
-                flex = 1;  // Контейнер занимает оставшуюся ширину
+                horizontal = FALSE;
+                MOVE PROPERTY(connectionType1(l));
+                MOVE PROPERTY(connectionType2(l));
+                MOVE PROPERTY(extraRigidity(l));
+                flex = 1;
+                fill = 1;
             }
         }
     }
-    
+
     // Контейнер для кнопок внизу формы
     NEW buttonPane {
-        horizontal = TRUE; // Горизонтальное расположение кнопок
+        horizontal = TRUE;
         fill = 1;
-      flex =1;
+
         // Контейнер слева
         NEW leftButtons {
-            horizontal = FALSE; // Горизонтальный контейнер для тулбара слева
-            flex = 0;
+            horizontal = FALSE;
             fill = 1;
-            MOVE TOOLBARLEFT {  // Перемещаем TOOLBARLEFT в левую часть
+            flex = 1;
+            MOVE TOOLBARLEFT {
                 alignment = START;
             }
         }
 
         // Контейнер справа
         NEW rightButtons {
-            horizontal = TRUE; // Горизонтальный контейнер для кнопок справа
-            flex = 1;
-            fill = 1;
-            MOVE TOOLBARRIGHT { // Перемещаем TOOLBARRIGHT в правую часть
+            horizontal = TRUE;
+            MOVE TOOLBARRIGHT {
                 alignment = END;
             }
         }
     }
-
-
-
-
 }
-
-
-
-
 
 // Навигатор
 NAVIGATOR {

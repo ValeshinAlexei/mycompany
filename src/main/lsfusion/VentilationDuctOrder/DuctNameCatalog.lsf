@@ -1,16 +1,76 @@
 MODULE DuctNameCatalog;
 
-CLASS DuctName 'Наименование изделия';    // Создание класса для справочника наименований
+// Определение класса для справочника наименований
+CLASS DuctName 'Наименование изделия';
 name 'Наименование' = DATA BPSTRING[100] (DuctName);
+parent 'Родитель' = DATA DuctName (DuctName); // Связываем с родительской категорией
 
-// Форма для работы с наименованиями изделий
-FORM ductNames 'Список наименований изделий'
-    OBJECTS d = DuctName
-    PROPERTIES(d) name
-    PROPERTIES(d) NEWSESSION NEW, DELETE, EDIT
+// Вычисление уровня иерархии
+level 'Уровень' (DuctName child, DuctName parent) =
+    RECURSION 1l IF child IS DuctName AND parent = child
+        STEP 2l IF parent = parent($parent) MATERIALIZED;
+
+// Определение канонического имени для отображения полного пути категории
+canonicalName 'Полное имя' (DuctName d) =
+    GROUP CONCAT name(DuctName parent), ' / ' ORDER DESC level(d, parent) CHARWIDTH 50 IN id;
+canonicalNameParent 'Полное имя родителя' (DuctName d) = canonicalName(parent(d));
+
+// Форма для выбора родительской категории
+FORM selectParent 'Выбор родителя'
+    OBJECTS p = DuctName // Объект для выбора
+    PROPERTIES(p) name // Здесь явно указываем, что нужно отображать наименование категорий
 ;
 
-// Добавление формы в навигатор
+DESIGN selectParent {
+    NEW box {
+        caption = 'Выбор родителя';
+        MOVE GRID(p); // Отображаем категории в виде таблицы с именами
+    }
+}
+
+// Форма для редактирования наименования изделия
+FORM editDuctName 'Редактирование наименования изделия'
+    OBJECTS d = DuctName PANEL // Редактируем только одно наименование
+    PROPERTIES(d) name, parent, canonicalNameParent // Отображаем наименование, родителя и полное имя родителя
+    EDIT DuctName OBJECT d // Правильное объявление редактирования объекта
+;
+
+// Дизайн формы editDuctName
+DESIGN editDuctName {
+    NEW box {
+        caption = 'Наименование изделия';
+        MOVE PROPERTY(name(d)); // Отображаем наименование изделия
+        MOVE PROPERTY(parent(d)); // Используем стандартное свойство parent для выбора родителя через выпадающий список
+        MOVE PROPERTY(canonicalNameParent(d)); // Отображаем полное имя родителя (только для просмотра)
+    }
+}
+
+// Форма для отображения списка наименований изделий в виде списка и дерева
+FORM ductNames 'Список наименований изделий'
+    OBJECTS dList = DuctName GRID // Табличное представление данных
+    PROPERTIES(dList) READONLY name, canonicalNameParent // Поле для отображения наименования и полного имени
+    PROPERTIES(dList) NEWSESSION NEW, EDIT, DELETE // Возможность создания, редактирования и удаления через модальные формы
+
+    TREE ductTree dTree = DuctName PARENT parent(dTree) // Дерево категорий с родительскими категориями
+    PROPERTIES(dTree) READONLY canonicalNameParent // Свойство для отображения полного пути наименований
+    PROPERTIES(dTree) NEWSESSION NEW, EDIT, DELETE // Возможность создания, редактирования и удаления через модальные формы
+;
+
+// Дизайн формы с вкладками
+DESIGN ductNames {
+    fill = 1;
+    tabbed = TRUE; // Включаем вкладки
+    NEW listTab { // Вкладка "Список"
+        caption = 'Список';
+        MOVE BOX(dList); // Табличное представление
+    }
+    NEW treeTab { // Вкладка "Дерево"
+        caption = 'Дерево';
+        MOVE BOX(TREE ductTree); // Древовидное представление
+    }
+}
+
+// Навигатор — добавление формы в меню
 NAVIGATOR {
-    NEW ductNames FIRST;
+    NEW ductNames FIRST; // Добавляем форму списка наименований в навигатор
 }
