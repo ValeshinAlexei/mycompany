@@ -1,76 +1,138 @@
 MODULE DuctNameCatalog;
 
-// Определение класса для справочника наименований
-CLASS DuctName 'Наименование изделия';
-name 'Наименование' = DATA BPSTRING[100] (DuctName);
-parent 'Родитель' = DATA DuctName (DuctName); // Связываем с родительской категорией
+REQUIRE Hierarchy, MetaNumerator;
 
-// Вычисление уровня иерархии
-level 'Уровень' (DuctName child, DuctName parent) =
-    RECURSION 1l IF child IS DuctName AND parent = child
+NAMESPACE MasterData;
+
+CLASS DuctCategory 'Duct Category';
+
+@defineID(ductCategory, 'Duct Categories', 'DC', 6);
+
+name '{Name}' = DATA ISTRING[50] (DuctCategory) IN id NONULL;
+
+archived 'Archived' = DATA BOOLEAN (DuctCategory);
+active '{Active}' (DuctCategory c) = NOT archived(c);
+
+// Иерархия категорий
+parent = DATA DuctCategory (DuctCategory) INDEXED;
+
+nameParent 'Parent' (DuctCategory c) = name(parent(c));
+
+rootDuctCategory() = GROUP MIN DuctCategory c AS DuctCategory IF NOT parent(c);
+
+CONSTRAINT DROPPED(DuctCategory c IS DuctCategory) AND PREV(parent(DuctCategory child) = c)
+    MESSAGE 'It is forbidden to delete categories that are referenced by other categories';
+
+// Расчет уровня категорий
+level 'Level' (DuctCategory child, DuctCategory parent) =
+    RECURSION 1l IF child IS DuctCategory AND parent = child
         STEP 2l IF parent = parent($parent) MATERIALIZED;
 
-// Определение канонического имени для отображения полного пути категории
-canonicalName 'Полное имя' (DuctName d) =
-    GROUP CONCAT name(DuctName parent), ' / ' ORDER DESC level(d, parent) CHARWIDTH 50 IN id;
-canonicalNameParent 'Полное имя родителя' (DuctName d) = canonicalName(parent(d));
+canonicalName 'Canonical name' (DuctCategory c) =
+    GROUP CONCAT name(DuctCategory parent), ' / ' ORDER DESC level(c, parent) CHARWIDTH 50 IN id;
+canonicalNameParent 'Parent' (DuctCategory c) = canonicalName(parent(c));
 
-// Форма для выбора родительской категории
-FORM selectParent 'Выбор родителя'
-    OBJECTS p = DuctName // Объект для выбора
-    PROPERTIES(p) name // Здесь явно указываем, что нужно отображать наименование категорий
+levelRoot '{hierarchy.level}' (DuctCategory child, DuctCategory parent) = PARTITION SUM 1 IF level(child, parent)
+    ORDER DESC level(child, parent)
+    BY child MATERIALIZED;
+ductCategoryRoot (DuctCategory child, level) = GROUP NAGGR DuctCategory parent BY levelRoot(child, parent);
+
+ductCategory1 (DuctCategory child) = ductCategoryRoot(child, 1) MATERIALIZED;
+nameDuctCategory1 'Category 1' (DuctCategory child) = name(ductCategory1(child));
+
+ductCategory2 (DuctCategory child) = ductCategoryRoot(child, 2) MATERIALIZED;
+nameDuctCategory2 'Category 2' (DuctCategory child) = name(ductCategory2(child));
+
+ductCategory3 (DuctCategory child) = ductCategoryRoot(child, 3) MATERIALIZED;
+nameDuctCategory3 'Category 3' (DuctCategory child) = name(ductCategory3(child));
+
+ductCategory4 (DuctCategory child) = ductCategoryRoot(child, 4) MATERIALIZED;
+nameDuctCategory4 'Category 4' (DuctCategory child) = name(ductCategory4(child));
+
+ductCategory5 (DuctCategory child) = ductCategoryRoot(child, 5) MATERIALIZED;
+nameDuctCategory5 'Category 5' (DuctCategory child) = name(ductCategory5(child));
+
+ductCategory6 (DuctCategory child) = ductCategoryRoot(child, 6) MATERIALIZED;
+nameDuctCategory6 'Category 6' (DuctCategory child) = name(ductCategory6(child));
+
+// Форма для редактирования категории
+FORM ductCategory 'Duct Category'
+    OBJECTS c = DuctCategory PANEL
+    PROPERTIES(c) name,  archived, canonicalNameParent
+
+    EDIT DuctCategory OBJECT c
 ;
 
-DESIGN selectParent {
-    NEW box {
-        caption = 'Выбор родителя';
-        MOVE GRID(p); // Отображаем категории в виде таблицы с именами
+DESIGN ductCategory {
+    OBJECTS {
+        NEW pane {
+            NEW id {
+                horizontal = TRUE;
+                alignment = STRETCH;
+                MOVE PROPERTY(name(c));
+                
+                MOVE PROPERTY(archived(c));
+            }
+            MOVE PROPERTY(canonicalNameParent(c)) { alignment = STRETCH; };
+            NEW params {
+                alignment = STRETCH;
+            }
+        }
+        NEW tabs {
+            fill = 1;
+            tabbed = TRUE;
+            NEW default {
+                caption = 'Default values';
+            }
+        }
     }
 }
 
-// Форма для редактирования наименования изделия
-FORM editDuctName 'Редактирование наименования изделия'
-    OBJECTS d = DuctName PANEL // Редактируем только одно наименование
-    PROPERTIES(d) name, parent, canonicalNameParent // Отображаем наименование, родителя и полное имя родителя
-    EDIT DuctName OBJECT d // Правильное объявление редактирования объекта
+// Логика добавления новой категории
+newDuctCategory 'Duct Category' (DuctCategory cc) {
+    NEWSESSION {
+        NEW cat = DuctCategory {
+            parent(cat) <- cc;
+            DIALOG ductCategory OBJECTS c = cat DOCKED DO seek(cat);
+        }
+    }
+} IMAGE 'add.png' CHANGEKEY 'INSERT' HIDE;
+
+// Форма списка категорий
+FORM ductCategories 'Duct Categories'
+    OBJECTS c = DuctCategory
+    PROPERTIES(c) READONLY name, canonicalNameParent
+    PROPERTIES(c) NEWSESSION NEW, EDIT, DELETE
+    FILTERGROUP active
+        FILTER '{Active}' active(c) 'F8' DEFAULT
+        FILTER 'Archived' archived(c) 'F7'
+
+    TREE ductCategories cc = DuctCategory PARENT parent(cc)
+    PROPERTIES READONLY name(cc)
+    PROPERTIES(cc) NEWSESSION EDIT, DELETE
+    PROPERTIES(cc) newDuctCategory DRAW cc TOOLBAR
+    ORDERS name(cc)
+    FILTERGROUP activeC
+        FILTER '{Active}' active(cc) 'F8' DEFAULT
+        FILTER 'Archived' archived(cc) 'F7'
+
+    LIST DuctCategory OBJECT c
+
+    EVENTS ON CHANGE cc { SEEK ductCategories.c = cc; }
 ;
 
-// Дизайн формы editDuctName
-DESIGN editDuctName {
-    NEW box {
-        caption = 'Наименование изделия';
-        MOVE PROPERTY(name(d)); // Отображаем наименование изделия
-        MOVE PROPERTY(parent(d)); // Используем стандартное свойство parent для выбора родителя через выпадающий список
-        MOVE PROPERTY(canonicalNameParent(d)); // Отображаем полное имя родителя (только для просмотра)
+DESIGN ductCategories {
+    OBJECTS {
+        fill = 1;
+        tabbed = TRUE;
+        NEW list {
+            caption = 'List';
+            MOVE BOX(c);
+        }
+        NEW tree {
+            caption = 'Tree';
+            MOVE BOX(TREE ductCategories);
+        }
     }
 }
 
-// Форма для отображения списка наименований изделий в виде списка и дерева
-FORM ductNames 'Список наименований изделий'
-    OBJECTS dList = DuctName GRID // Табличное представление данных
-    PROPERTIES(dList) READONLY name, canonicalNameParent // Поле для отображения наименования и полного имени
-    PROPERTIES(dList) NEWSESSION NEW, EDIT, DELETE // Возможность создания, редактирования и удаления через модальные формы
-
-    TREE ductTree dTree = DuctName PARENT parent(dTree) // Дерево категорий с родительскими категориями
-    PROPERTIES(dTree) READONLY canonicalNameParent // Свойство для отображения полного пути наименований
-    PROPERTIES(dTree) NEWSESSION NEW, EDIT, DELETE // Возможность создания, редактирования и удаления через модальные формы
-;
-
-// Дизайн формы с вкладками
-DESIGN ductNames {
-    fill = 1;
-    tabbed = TRUE; // Включаем вкладки
-    NEW listTab { // Вкладка "Список"
-        caption = 'Список';
-        MOVE BOX(dList); // Табличное представление
-    }
-    NEW treeTab { // Вкладка "Дерево"
-        caption = 'Дерево';
-        MOVE BOX(TREE ductTree); // Древовидное представление
-    }
-}
-
-// Навигатор — добавление формы в меню
-NAVIGATOR {
-    NEW ductNames FIRST; // Добавляем форму списка наименований в навигатор
-}

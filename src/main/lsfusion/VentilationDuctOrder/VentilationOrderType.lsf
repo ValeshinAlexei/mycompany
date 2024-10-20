@@ -1,0 +1,38 @@
+MODULE VentilationOrderType;
+
+REQUIRE Numerator;
+
+NAMESPACE Ventilation;
+
+// Класс для типов заказов
+CLASS OrderType 'Тип заказа';
+name '{Имя}' = DATA ISTRING[50] (OrderType) NONULL CHARWIDTH 15;
+
+// Связь с нумератором
+numerator 'Нумератор' = DATA Numerator (OrderType);
+nameNumerator 'Нумератор' (OrderType o) = name(numerator(o));
+
+// Форма для редактирования типа заказа
+FORM orderType 'Тип заказа'
+    OBJECTS o = OrderType PANEL
+    PROPERTIES(o) name, nameNumerator
+
+    EDIT OrderType OBJECT o;
+;
+
+DESIGN orderType {
+    OBJECTS {
+        NEW tabbedPane {
+            fill = 1;
+            tabbed = TRUE;
+        }
+    }
+}
+
+// Форма для списка типов заказов
+FORM orderTypes 'Типы заказов'
+    OBJECTS o = OrderType
+    PROPERTIES(o) READONLY name
+
+    LIST OrderType OBJECT o;
+;

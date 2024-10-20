@@ -23,10 +23,22 @@ orderEvent 'Событие заказа' = DATA OrderEvent (Order) NONULL;
 // Поля для строк заказа
 event 'Событие строки' = DATA OrderEvent (OrderLine) NONULL DELETE;
 
-// Изменение на использование каталога DuctName для наименований изделий
-ductName 'Наименование изделия' = DATA DuctName (OrderLine);  // Изменено для ссылки на объект DuctName
+// Использование категорий для выбора изделия
+ductCategory 'Категория изделия' = DATA DuctCategory (OrderLine);
+categoryName 'Имя категории' (OrderLine l) = canonicalName(ductCategory(l));
 
-ductDimensions1 'D1,A,B мм' = DATA BPSTRING[100] (OrderLine);
+// Определение полей для D1, A и B
+ductDimensionD1 'D1 мм' = DATA NUMERIC[10,2] (OrderLine);
+ductDimensionA 'A мм' = DATA NUMERIC[10,2] (OrderLine);
+ductDimensionB 'B мм' = DATA NUMERIC[10,2] (OrderLine);
+
+// Формируемое поле для представления D1, A, B мм
+ductDimensions1 'D1,A,B мм' (OrderLine l) =
+    IF ductDimensionD1(l) THEN STRING(ductDimensionD1(l))
+    ELSE IF ductDimensionA(l) AND ductDimensionB(l) THEN
+        STRING(ductDimensionA(l)) + ' x ' + STRING(ductDimensionB(l))
+    ELSE NULL;
+
 ductDimensions2 'D2,C,D мм' = DATA BPSTRING[100] (OrderLine);
 ductMaterial 'Материал' = DATA BPSTRING[100] (OrderLine);
 ductThickness 'Толщина материала' = DATA BPSTRING[10] (OrderLine);
@@ -66,7 +78,7 @@ FORM order 'Заказ на вентиляционные трубы'
     PROPERTIES(o) number, date, customer, company, scheduledDate, deliveryAddress, orderEvent READONLY
 
     OBJECTS l = OrderLine
-    PROPERTIES(l) index, ductName, ductDimensions1, ductDimensions2, ductMaterial, ductThickness,
+    PROPERTIES(l) index, categoryName, ductDimensions1, ductDimensions2, ductMaterial, ductThickness,
         ductQuantity, ductShinaLength, ductAngle, ductArea, ductTotalPrice, ductDiscount,
         ductPriceWithDiscount, ductTotalWeight, event READONLY
     PROPERTIES(l) NESTEDSESSION NEW, DELETE, EDIT
@@ -82,12 +94,35 @@ FORM order 'Заказ на вентиляционные трубы'
         }
 ;
 
+
+
+// Форма для списка заказов
+FORM orders 'Заказы на вентиляционные трубы'
+    OBJECTS o = Order
+    PROPERTIES(o) number, date, customer, company, scheduledDate, deliveryAddress
+    PROPERTIES(o) NEWSESSION NEW, EDIT, DELETE
+    LIST Order OBJECT o
+;
+
+
 // Форма для редактирования строки заказа
 FORM orderLine 'Строка заказа на вентиляционные трубы'
     OBJECTS l = OrderLine PANEL
-    // Обновляем форму для выбора наименования изделия из каталога
-    PROPERTIES(l) ductName, ductDimensions1, ductDimensions2, ductMaterial, ductThickness,
+    TREE categories c = DuctCategory PARENT parent(c)  // Объявляем дерево категорий с родительскими связями
+    PROPERTIES READONLY name(c)
+    ORDERS name(c)
+
+    // Убираем свойство выбора категории изделия
+    // PROPERTIES(l) ductCategory, 
+    PROPERTIES(l) ductDimensionD1, ductDimensionA, ductDimensionB, ductDimensions2, ductMaterial, ductThickness,
         ductQuantity, ductArea, ductDiscount, connectionType1, connectionType2, extraRigidity
+
+        // Добавляем событие на выбор категории
+    EVENTS ON CHANGE c {
+        IF c THEN {
+            ductCategory(l) <- c;
+        }
+    }
     EDIT OrderLine OBJECT l
     EVENTS
         ON INIT {
@@ -97,94 +132,72 @@ FORM orderLine 'Строка заказа на вентиляционные тр
         }
 ;
 
-// Форма для списка заказов
-FORM orders 'Заказы на вентиляционные трубы'
-    OBJECTS o = Order
-    PROPERTIES(o) number, date, customer, company, scheduledDate, deliveryAddress
-    PROPERTIES(o) NEWSESSION NEW, EDIT, DELETE
-;
-
-
 // Дизайн формы строки заказа
 DESIGN orderLine {
-    NEW orderL {
-        horizontal = TRUE;
-        fill = 1;
-        flex = 100;
-
-        // Центральный контейнер (Контейнеры 1, 2, 3 и 4)
-        NEW centerPane {
+    OBJECTS {
+        // Главный контейнер
+        NEW pane {
             horizontal = TRUE;
-            flex = 1;
             fill = 1;
 
-            // Левый контейнер (Категория - контейнер 1)
+            // Левый блок с деревом категорий
             NEW leftPane {
-                horizontal = FALSE;
-                MOVE PROPERTY(ductName(l)); // Обновлено для использования каталога
-                flex = 1;
                 fill = 1;
+                width = 200;
+
+                NEW categoryBox {
+                    caption = 'Категории';
+                    fill = 1;
+                    MOVE BOX(TREE categories);  // Перемещаем дерево категорий в отдельный бокс
+                }
             }
 
-            // Блок параметров изделия (Контейнер 2)
-            NEW dimensionsPane {
+            // Центральный блок с параметрами изделия
+            NEW centerPane {
+                fill = 3;
+                width = 600;
                 horizontal = FALSE;
-                MOVE PROPERTY(ductDimensions1(l));
-                MOVE PROPERTY(ductDimensions2(l));
-                MOVE PROPERTY(ductQuantity(l));
-                MOVE PROPERTY(ductMaterial(l));
-                MOVE PROPERTY(ductThickness(l));
-                MOVE PROPERTY(ductDiscount(l));
-                flex = 1;
-                fill = 1;
-            }
 
-            // Placeholder для изображения (Контейнер 3)
-            NEW imagePane {
-                horizontal = FALSE;
-                MOVE PROPERTY(ductArea(l));
-                flex = 1;
-                fill = 1;
-            }
+                // Панель свойств изделия
+                NEW propertiesPane {
+                    caption = 'Свойства изделия';
+                    horizontal = FALSE;
+                    MOVE PROPERTY (ductDimensionD1(l));
+                    MOVE PROPERTY (ductDimensionA(l));
+                    MOVE PROPERTY (ductDimensionB(l));
+                    MOVE PROPERTY(ductDimensions2(l));
+                    MOVE PROPERTY(ductQuantity(l));
+                    MOVE PROPERTY(ductMaterial(l));
+                    MOVE PROPERTY(ductThickness(l));
+                    MOVE PROPERTY(ductDiscount(l));
+                }
 
-            // Правый контейнер для соединений (Контейнер 4)
-            NEW rightPane {
-                horizontal = FALSE;
-                MOVE PROPERTY(connectionType1(l));
-                MOVE PROPERTY(connectionType2(l));
-                MOVE PROPERTY(extraRigidity(l));
-                flex = 1;
-                fill = 1;
-            }
-        }
-    }
+                // Панель изображения
+                NEW imagePane {
+                    caption = 'Изображение';
+                    horizontal = FALSE;
+                    MOVE PROPERTY(ductArea(l));
+                }
 
-    // Контейнер для кнопок внизу формы
-    NEW buttonPane {
-        horizontal = TRUE;
-        fill = 1;
-
-        // Контейнер слева
-        NEW leftButtons {
-            horizontal = FALSE;
-            fill = 1;
-            flex = 1;
-            MOVE TOOLBARLEFT {
-                alignment = START;
-            }
-        }
-
-        // Контейнер справа
-        NEW rightButtons {
-            horizontal = TRUE;
-            MOVE TOOLBARRIGHT {
-                alignment = END;
+                // Панель соединений
+                NEW connectionsPane {
+                    caption = 'Соединения';
+                    horizontal = FALSE;
+                    MOVE PROPERTY(connectionType1(l));
+                    MOVE PROPERTY(connectionType2(l));
+                    MOVE PROPERTY(extraRigidity(l));
+                }
             }
         }
     }
 }
 
-// Навигатор
+
+// Навигатор — добавление форм списка категорий и заказов в одну вкладку
 NAVIGATOR {
-    NEW orders FIRST;
+    NEW FOLDER ventilationDucts 'Вентиляционные трубы' WINDOW toolbar {
+        NEW FORM orders 'Заказы на вентиляционные трубы' = orders; // Форма для заказов
+        NEW FORM ductCategories 'Категории изделий' = ductCategories; // Форма для категорий изделий
+    }
 }
+
