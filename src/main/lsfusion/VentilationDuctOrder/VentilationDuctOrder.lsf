@@ -1,6 +1,6 @@
 MODULE VentilationDuctOrder;
 
-REQUIRE DuctNameCatalog, Time, MetaNumerator, Employee, Company, DateUtils, FileUtils, MetaTax;
+REQUIRE MetaNumerator, VentilationOrderType, DuctNameCatalog, Time, Employee, Company, DateUtils, FileUtils, MetaTax;
 
 NAMESPACE Ventilation;
 
@@ -9,8 +9,13 @@ CLASS Order 'Заказ на вентиляционные трубы';
 CLASS OrderLine 'Строка заказа на вентиляционные трубы';
 CLASS OrderEvent 'Событие заказа';
 
+// Свойство для типа заказа, связанного с нумератором
+type 'Тип заказа' = DATA OrderType (Order);
+
+// Генерация номера на основе нумератора
+@defineNumberType(Order);  // Объявление номера с помощью макроса
+
 // Поля для заказов
-number 'Номер заказа' = DATA STRING[20] (Order) NONULL;
 date 'Дата заказа' = DATA DATE (Order) NONULL;
 customer 'Покупатель' = DATA BPSTRING[100] (Order);
 company 'Компания' = DATA BPSTRING[100] (Order);
@@ -75,7 +80,7 @@ assignEvent (Order o) {
 // Форма для редактирования заказа
 FORM order 'Заказ на вентиляционные трубы'
     OBJECTS o = Order PANEL
-    PROPERTIES(o) number, date, customer, company, scheduledDate, deliveryAddress, orderEvent READONLY
+    PROPERTIES(o) number, type, date, customer, company, scheduledDate, deliveryAddress, orderEvent READONLY
 
     OBJECTS l = OrderLine
     PROPERTIES(l) index, categoryName, ductDimensions1, ductDimensions2, ductMaterial, ductThickness,
@@ -88,13 +93,10 @@ FORM order 'Заказ на вентиляционные трубы'
 
     EVENTS
         ON INIT {
-            assignEvent(o);
-            currentOrder() <- o;
-            currentEvent() <- orderEvent(o);
-        }
-;
-
-
+            assignEvent(o);  // Присваиваем событие
+            currentOrder() <- o;  // Устанавливаем текущий заказ
+            currentEvent() <- orderEvent(o);  // Устанавливаем текущее событие
+        };
 
 // Форма для списка заказов
 FORM orders 'Заказы на вентиляционные трубы'
@@ -104,25 +106,22 @@ FORM orders 'Заказы на вентиляционные трубы'
     LIST Order OBJECT o
 ;
 
-
 // Форма для редактирования строки заказа
 FORM orderLine 'Строка заказа на вентиляционные трубы'
     OBJECTS l = OrderLine PANEL
-    TREE categories c = DuctCategory PARENT parent(c)  // Объявляем дерево категорий с родительскими связями
+    TREE categories c = DuctCategory PARENT parent(c)
     PROPERTIES READONLY name(c)
     ORDERS name(c)
 
-    // Убираем свойство выбора категории изделия
-    // PROPERTIES(l) ductCategory, 
     PROPERTIES(l) ductDimensionD1, ductDimensionA, ductDimensionB, ductDimensions2, ductMaterial, ductThickness,
         ductQuantity, ductArea, ductDiscount, connectionType1, connectionType2, extraRigidity
 
-        // Добавляем событие на выбор категории
     EVENTS ON CHANGE c {
         IF c THEN {
             ductCategory(l) <- c;
         }
     }
+
     EDIT OrderLine OBJECT l
     EVENTS
         ON INIT {
@@ -135,12 +134,10 @@ FORM orderLine 'Строка заказа на вентиляционные тр
 // Дизайн формы строки заказа
 DESIGN orderLine {
     OBJECTS {
-        // Главный контейнер
         NEW pane {
             horizontal = TRUE;
             fill = 1;
 
-            // Левый блок с деревом категорий
             NEW leftPane {
                 fill = 1;
                 width = 200;
@@ -148,17 +145,15 @@ DESIGN orderLine {
                 NEW categoryBox {
                     caption = 'Категории';
                     fill = 1;
-                    MOVE BOX(TREE categories);  // Перемещаем дерево категорий в отдельный бокс
+                    MOVE BOX(TREE categories);
                 }
             }
 
-            // Центральный блок с параметрами изделия
             NEW centerPane {
                 fill = 3;
                 width = 600;
                 horizontal = FALSE;
 
-                // Панель свойств изделия
                 NEW propertiesPane {
                     caption = 'Свойства изделия';
                     horizontal = FALSE;
@@ -172,14 +167,12 @@ DESIGN orderLine {
                     MOVE PROPERTY(ductDiscount(l));
                 }
 
-                // Панель изображения
                 NEW imagePane {
                     caption = 'Изображение';
                     horizontal = FALSE;
                     MOVE PROPERTY(ductArea(l));
                 }
 
-                // Панель соединений
                 NEW connectionsPane {
                     caption = 'Соединения';
                     horizontal = FALSE;
@@ -192,12 +185,10 @@ DESIGN orderLine {
     }
 }
 
-
 // Навигатор — добавление форм списка категорий и заказов в одну вкладку
 NAVIGATOR {
     NEW FOLDER ventilationDucts 'Вентиляционные трубы' WINDOW toolbar {
-        NEW FORM orders 'Заказы на вентиляционные трубы' = orders; // Форма для заказов
-        NEW FORM ductCategories 'Категории изделий' = ductCategories; // Форма для категорий изделий
+        NEW FORM orders 'Заказы на вентиляционные трубы' = orders;
+        NEW FORM ductCategories 'Категории изделий' = ductCategories;
     }
 }
-
