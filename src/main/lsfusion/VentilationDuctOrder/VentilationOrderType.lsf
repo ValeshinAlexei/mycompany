@@ -13,24 +13,20 @@ numerator 'Нумератор' = DATA Numerator (OrderType);
 nameNumerator 'Нумератор' (OrderType o) = name(numerator(o));
 
 // Форма для редактирования типа заказа
-FORM orderType 'Тип заказа'
-    OBJECTS o = OrderType PANEL
-    PROPERTIES(o) name, nameNumerator
-    PROPERTIES(o) NEWSESSION NEW, DELETE, EDIT  // Добавление действий
-    EDIT OrderType OBJECT o;
-;
+
 
 // Форма для списка типов заказов
 FORM orderTypes 'Типы заказов'
     OBJECTS o = OrderType
-    PROPERTIES(o)  name
-    PROPERTIES(o) NEWSESSION NEW, DELETE, EDIT  // Добавление действий
+    PROPERTIES(o) name, nameNumerator  // Отображаем два свойства: имя и имя нумератора
+    PROPERTIES(o) NEWSESSION NEW, DELETE, EDIT  // Добавление действий для создания, удаления и редактирования
+   ;
+FORM orderType 'Тип заказа'
+    OBJECTS o = OrderType PANEL
+    PROPERTIES(o) name, numerator  // Здесь вводится имя и выбирается нумератор
     EDIT OrderType OBJECT o;
+;
 
-// Правильная конфигурация навигатора
-NAVIGATOR {
-    NEW FOLDER ventilation 'Вентиляция' WINDOW toolbar {
-        NEW FORM orderType 'Нумератор' = orderType; // Форма редактирования нумератора
-        NEW FORM orderTypes 'Типы заказов' = orderTypes; // Форма списка типов заказов
-    }
-}
+
+
+

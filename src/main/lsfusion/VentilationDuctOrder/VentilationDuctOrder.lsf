@@ -32,12 +32,15 @@ event 'Событие строки' = DATA OrderEvent (OrderLine) NONULL DELETE;
 ductCategory 'Категория изделия' = DATA DuctCategory (OrderLine);
 categoryName 'Имя категории' (OrderLine l) = canonicalName(ductCategory(l));
 
+// Свойство для отображения имени типа заказа
+nameType 'Название типа заказа' (Order o) = name(type(o));
+
 // Определение полей для D1, A и B
 ductDimensionD1 'D1 мм' = DATA NUMERIC[10,2] (OrderLine);
 ductDimensionA 'A мм' = DATA NUMERIC[10,2] (OrderLine);
 ductDimensionB 'B мм' = DATA NUMERIC[10,2] (OrderLine);
 
-// Формируемое поле для представления D1, A, B мм
+// Свойство для представления D1, A, B мм
 ductDimensions1 'D1,A,B мм' (OrderLine l) =
     IF ductDimensionD1(l) THEN STRING(ductDimensionD1(l))
     ELSE IF ductDimensionA(l) AND ductDimensionB(l) THEN
@@ -48,6 +51,10 @@ ductDimensions2 'D2,C,D мм' = DATA BPSTRING[100] (OrderLine);
 ductMaterial 'Материал' = DATA BPSTRING[100] (OrderLine);
 ductThickness 'Толщина материала' = DATA BPSTRING[10] (OrderLine);
 ductQuantity 'Количество' = DATA NUMERIC[10,2] (OrderLine);
+
+// Добавляем новое свойство для длины
+ductLength 'Длина (м)' = DATA NUMERIC[10,2] (OrderLine);  // Новое свойство для длины
+
 ductShinaLength 'Шина (м)' = DATA NUMERIC[10,2] (OrderLine);
 ductAngle 'УГ шт' = DATA NUMERIC[5,2] (OrderLine);
 ductArea 'Площадь (м²)' = DATA NUMERIC[10,2] (OrderLine);
@@ -80,11 +87,12 @@ assignEvent (Order o) {
 // Форма для редактирования заказа
 FORM order 'Заказ на вентиляционные трубы'
     OBJECTS o = Order PANEL
-    PROPERTIES(o) number, type, date, customer, company, scheduledDate, deliveryAddress, orderEvent READONLY
+    PROPERTIES(o) number, nameType, date, customer, company, scheduledDate, deliveryAddress, orderEvent READONLY
 
     OBJECTS l = OrderLine
     PROPERTIES(l) index, categoryName, ductDimensions1, ductDimensions2, ductMaterial, ductThickness,
-        ductQuantity, ductShinaLength, ductAngle, ductArea, ductTotalPrice, ductDiscount,
+        ductQuantity, ductLength,  // Добавлено свойство ductLength между количеством и шиной
+        ductShinaLength, ductAngle, ductArea, ductTotalPrice, ductDiscount,
         ductPriceWithDiscount, ductTotalWeight, event READONLY
     PROPERTIES(l) NESTEDSESSION NEW, DELETE, EDIT
     FILTERS event(l) = orderEvent(o)
@@ -114,7 +122,8 @@ FORM orderLine 'Строка заказа на вентиляционные тр
     ORDERS name(c)
 
     PROPERTIES(l) ductDimensionD1, ductDimensionA, ductDimensionB, ductDimensions2, ductMaterial, ductThickness,
-        ductQuantity, ductArea, ductDiscount, connectionType1, connectionType2, extraRigidity
+        ductQuantity, ductLength,  // Добавлено свойство ductLength между количеством и шиной
+        ductShinaLength, ductArea, ductDiscount, connectionType1, connectionType2, extraRigidity
 
     EVENTS ON CHANGE c {
         IF c THEN {
@@ -162,6 +171,7 @@ DESIGN orderLine {
                     MOVE PROPERTY (ductDimensionB(l));
                     MOVE PROPERTY(ductDimensions2(l));
                     MOVE PROPERTY(ductQuantity(l));
+                    MOVE PROPERTY(ductLength(l));  // Добавлено свойство ductLength между количеством и шиной
                     MOVE PROPERTY(ductMaterial(l));
                     MOVE PROPERTY(ductThickness(l));
                     MOVE PROPERTY(ductDiscount(l));
@@ -190,5 +200,6 @@ NAVIGATOR {
     NEW FOLDER ventilationDucts 'Вентиляционные трубы' WINDOW toolbar {
         NEW FORM orders 'Заказы на вентиляционные трубы' = orders;
         NEW FORM ductCategories 'Категории изделий' = ductCategories;
+        NEW FORM orderTypes 'Типы заказов' = orderTypes;
     }
 }

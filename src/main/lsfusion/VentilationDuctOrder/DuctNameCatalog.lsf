@@ -70,7 +70,7 @@ DESIGN ductCategory {
                 horizontal = TRUE;
                 alignment = STRETCH;
                 MOVE PROPERTY(name(c));
-                
+
                 MOVE PROPERTY(archived(c));
             }
             MOVE PROPERTY(canonicalNameParent(c)) { alignment = STRETCH; };
