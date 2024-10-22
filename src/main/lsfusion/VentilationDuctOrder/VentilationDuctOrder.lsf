@@ -4,7 +4,6 @@ REQUIRE MetaNumerator, VentilationOrderType, DuctNameCatalog, Time, Employee, Co
 
 NAMESPACE Ventilation;
 
-// Определение классов
 CLASS Order 'Заказ на вентиляционные трубы';
 CLASS OrderLine 'Строка заказа на вентиляционные трубы';
 CLASS OrderEvent 'Событие заказа';
@@ -36,9 +35,9 @@ categoryName 'Имя категории' (OrderLine l) = canonicalName(ductCateg
 nameType 'Название типа заказа' (Order o) = name(type(o));
 
 // Определение полей для D1, A и B
-ductDimensionD1 'D1 мм' = DATA NUMERIC[10,2] (OrderLine);
-ductDimensionA 'A мм' = DATA NUMERIC[10,2] (OrderLine);
-ductDimensionB 'B мм' = DATA NUMERIC[10,2] (OrderLine);
+ductDimensionD1 'D1 мм' = DATA NUMERIC[10,0] (OrderLine);
+ductDimensionA 'A мм' = DATA NUMERIC[10,0] (OrderLine);
+ductDimensionB 'B мм' = DATA NUMERIC[10,0] (OrderLine);
 
 // Свойство для представления D1, A, B мм
 ductDimensions1 'D1,A,B мм' (OrderLine l) =
@@ -47,6 +46,7 @@ ductDimensions1 'D1,A,B мм' (OrderLine l) =
         STRING(ductDimensionA(l)) + ' x ' + STRING(ductDimensionB(l))
     ELSE NULL;
 
+// Дополнительные поля
 ductDimensions2 'D2,C,D мм' = DATA BPSTRING[100] (OrderLine);
 ductMaterial 'Материал' = DATA BPSTRING[100] (OrderLine);
 ductThickness 'Толщина материала' = DATA BPSTRING[10] (OrderLine);
@@ -109,7 +109,12 @@ FORM order 'Заказ на вентиляционные трубы'
 // Форма для списка заказов
 FORM orders 'Заказы на вентиляционные трубы'
     OBJECTS o = Order
-    PROPERTIES(o) number, date, customer, company, scheduledDate, deliveryAddress
+    PROPERTIES(o) number,
+        date,
+        customer,
+        company,
+        scheduledDate,
+        deliveryAddress
     PROPERTIES(o) NEWSESSION NEW, EDIT, DELETE
     LIST Order OBJECT o
 ;
@@ -166,12 +171,15 @@ DESIGN orderLine {
                 NEW propertiesPane {
                     caption = 'Свойства изделия';
                     horizontal = FALSE;
-                    MOVE PROPERTY (ductDimensionD1(l));
-                    MOVE PROPERTY (ductDimensionA(l));
-                    MOVE PROPERTY (ductDimensionB(l));
+
+                    // Управляем видимостью свойств через флаги showD1, showA, showB
+                    MOVE PROPERTY(ductDimensionD1(l)) { showIf = showD1(ductCategory(l)); }
+                    MOVE PROPERTY(ductDimensionA(l)) { showIf = showA(ductCategory(l)); }
+                    MOVE PROPERTY(ductDimensionB(l)) { showIf = showB(ductCategory(l)); }
                     MOVE PROPERTY(ductDimensions2(l));
                     MOVE PROPERTY(ductQuantity(l));
                     MOVE PROPERTY(ductLength(l));  // Добавлено свойство ductLength между количеством и шиной
+                    MOVE PROPERTY(ductShinaLength(l));
                     MOVE PROPERTY(ductMaterial(l));
                     MOVE PROPERTY(ductThickness(l));
                     MOVE PROPERTY(ductDiscount(l));
@@ -194,6 +202,9 @@ DESIGN orderLine {
         }
     }
 }
+
+
+
 
 // Навигатор — добавление форм списка категорий и заказов в одну вкладку
 NAVIGATOR {

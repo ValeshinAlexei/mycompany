@@ -4,62 +4,46 @@ REQUIRE Hierarchy, MetaNumerator;
 
 NAMESPACE MasterData;
 
-CLASS DuctCategory 'Duct Category';
+CLASS DuctCategory 'Категория изделия';
 
-@defineID(ductCategory, 'Duct Categories', 'DC', 6);
+@defineID(ductCategory, 'Категории изделий', 'DC', 6);
 
-name '{Name}' = DATA ISTRING[50] (DuctCategory) IN id NONULL;
+name '{Название}' = DATA ISTRING[50] (DuctCategory) IN id NONULL;
+archived 'Архивная' = DATA BOOLEAN (DuctCategory);
+active '{Активная}' (DuctCategory c) = NOT archived(c);
 
-archived 'Archived' = DATA BOOLEAN (DuctCategory);
-active '{Active}' (DuctCategory c) = NOT archived(c);
+// Логические флаги для отображения свойств в категории
+showD1 'Показывать D1' = DATA BOOLEAN (DuctCategory);
+showA 'Показывать A' = DATA BOOLEAN (DuctCategory);
+showB 'Показывать B' = DATA BOOLEAN (DuctCategory);
+showLength 'Показывать длину' = DATA BOOLEAN (DuctCategory);
+showShina 'Показывать шину' = DATA BOOLEAN (DuctCategory);
+showArea 'Показывать площадь' = DATA BOOLEAN (DuctCategory);
+showAngle 'Показывать угол' = DATA BOOLEAN (DuctCategory);
 
 // Иерархия категорий
 parent = DATA DuctCategory (DuctCategory) INDEXED;
-
-nameParent 'Parent' (DuctCategory c) = name(parent(c));
+nameParent 'Родитель' (DuctCategory c) = name(parent(c));
 
 rootDuctCategory() = GROUP MIN DuctCategory c AS DuctCategory IF NOT parent(c);
 
 CONSTRAINT DROPPED(DuctCategory c IS DuctCategory) AND PREV(parent(DuctCategory child) = c)
-    MESSAGE 'It is forbidden to delete categories that are referenced by other categories';
+    MESSAGE 'Запрещено удалять категории, на которые ссылаются другие категории';
 
 // Расчет уровня категорий
-level 'Level' (DuctCategory child, DuctCategory parent) =
+level 'Уровень' (DuctCategory child, DuctCategory parent) =
     RECURSION 1l IF child IS DuctCategory AND parent = child
         STEP 2l IF parent = parent($parent) MATERIALIZED;
 
-canonicalName 'Canonical name' (DuctCategory c) =
+canonicalName 'Каноническое имя' (DuctCategory c) =
     GROUP CONCAT name(DuctCategory parent), ' / ' ORDER DESC level(c, parent) CHARWIDTH 50 IN id;
-canonicalNameParent 'Parent' (DuctCategory c) = canonicalName(parent(c));
-
-levelRoot '{hierarchy.level}' (DuctCategory child, DuctCategory parent) = PARTITION SUM 1 IF level(child, parent)
-    ORDER DESC level(child, parent)
-    BY child MATERIALIZED;
-ductCategoryRoot (DuctCategory child, level) = GROUP NAGGR DuctCategory parent BY levelRoot(child, parent);
-
-ductCategory1 (DuctCategory child) = ductCategoryRoot(child, 1) MATERIALIZED;
-nameDuctCategory1 'Category 1' (DuctCategory child) = name(ductCategory1(child));
-
-ductCategory2 (DuctCategory child) = ductCategoryRoot(child, 2) MATERIALIZED;
-nameDuctCategory2 'Category 2' (DuctCategory child) = name(ductCategory2(child));
-
-ductCategory3 (DuctCategory child) = ductCategoryRoot(child, 3) MATERIALIZED;
-nameDuctCategory3 'Category 3' (DuctCategory child) = name(ductCategory3(child));
-
-ductCategory4 (DuctCategory child) = ductCategoryRoot(child, 4) MATERIALIZED;
-nameDuctCategory4 'Category 4' (DuctCategory child) = name(ductCategory4(child));
-
-ductCategory5 (DuctCategory child) = ductCategoryRoot(child, 5) MATERIALIZED;
-nameDuctCategory5 'Category 5' (DuctCategory child) = name(ductCategory5(child));
-
-ductCategory6 (DuctCategory child) = ductCategoryRoot(child, 6) MATERIALIZED;
-nameDuctCategory6 'Category 6' (DuctCategory child) = name(ductCategory6(child));
+canonicalNameParent 'Родитель' (DuctCategory c) = canonicalName(parent(c));
 
 // Форма для редактирования категории
-FORM ductCategory 'Duct Category'
+FORM ductCategory 'Категория изделия'
     OBJECTS c = DuctCategory PANEL
-    PROPERTIES(c) name,  archived, canonicalNameParent
-
+    PROPERTIES(c) name, archived, canonicalNameParent,
+        showD1, showA, showB, showLength, showShina, showArea, showAngle
     EDIT DuctCategory OBJECT c
 ;
 
@@ -70,12 +54,18 @@ DESIGN ductCategory {
                 horizontal = TRUE;
                 alignment = STRETCH;
                 MOVE PROPERTY(name(c));
-
                 MOVE PROPERTY(archived(c));
             }
             MOVE PROPERTY(canonicalNameParent(c)) { alignment = STRETCH; };
             NEW params {
                 alignment = STRETCH;
+                MOVE PROPERTY(showD1(c));
+                MOVE PROPERTY(showA(c));
+                MOVE PROPERTY(showB(c));
+                MOVE PROPERTY(showLength(c));
+                MOVE PROPERTY(showShina(c));
+                MOVE PROPERTY(showArea(c));
+                MOVE PROPERTY(showAngle(c));
             }
         }
         NEW tabs {
@@ -89,7 +79,7 @@ DESIGN ductCategory {
 }
 
 // Логика добавления новой категории
-newDuctCategory 'Duct Category' (DuctCategory cc) {
+newDuctCategory 'Новая категория' (DuctCategory cc) {
     NEWSESSION {
         NEW cat = DuctCategory {
             parent(cat) <- cc;
@@ -99,26 +89,19 @@ newDuctCategory 'Duct Category' (DuctCategory cc) {
 } IMAGE 'add.png' CHANGEKEY 'INSERT' HIDE;
 
 // Форма списка категорий
-FORM ductCategories 'Duct Categories'
+FORM ductCategories 'Категории изделий'
     OBJECTS c = DuctCategory
     PROPERTIES(c) READONLY name, canonicalNameParent
     PROPERTIES(c) NEWSESSION NEW, EDIT, DELETE
     FILTERGROUP active
-        FILTER '{Active}' active(c) 'F8' DEFAULT
-        FILTER 'Archived' archived(c) 'F7'
+        FILTER '{Активная}' active(c) 'F8' DEFAULT
+        FILTER 'Архивная' archived(c) 'F7'
 
     TREE ductCategories cc = DuctCategory PARENT parent(cc)
     PROPERTIES READONLY name(cc)
     PROPERTIES(cc) NEWSESSION EDIT, DELETE
     PROPERTIES(cc) newDuctCategory DRAW cc TOOLBAR
-    ORDERS name(cc)
-    FILTERGROUP activeC
-        FILTER '{Active}' active(cc) 'F8' DEFAULT
-        FILTER 'Archived' archived(cc) 'F7'
-
     LIST DuctCategory OBJECT c
-
-    EVENTS ON CHANGE cc { SEEK ductCategories.c = cc; }
 ;
 
 DESIGN ductCategories {
@@ -126,13 +109,12 @@ DESIGN ductCategories {
         fill = 1;
         tabbed = TRUE;
         NEW list {
-            caption = 'List';
+            caption = 'Список';
             MOVE BOX(c);
         }
         NEW tree {
-            caption = 'Tree';
+            caption = 'Дерево';
             MOVE BOX(TREE ductCategories);
         }
     }
 }
-
