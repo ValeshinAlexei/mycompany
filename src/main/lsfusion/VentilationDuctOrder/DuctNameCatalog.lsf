@@ -7,6 +7,8 @@ NAMESPACE MasterData;
 CLASS DuctCategory 'Категория изделия';
 
 @defineID(ductCategory, 'Категории изделий', 'DC', 6);
+// Свойство для фильтрации видимости категории в дереве
+isVisibleInTree 'Отображать в дереве' = DATA BOOLEAN (DuctCategory);  // <--- Вот это свойство
 
 name '{Название}' = DATA ISTRING[50] (DuctCategory) IN id NONULL;
 archived 'Архивная' = DATA BOOLEAN (DuctCategory);
@@ -16,6 +18,9 @@ active '{Активная}' (DuctCategory c) = NOT archived(c);
 showD1 'Показывать D1' = DATA BOOLEAN (DuctCategory);
 showA 'Показывать A' = DATA BOOLEAN (DuctCategory);
 showB 'Показывать B' = DATA BOOLEAN (DuctCategory);
+showD2 'Показывать D1' = DATA BOOLEAN (DuctCategory);
+showC 'Показывать A' = DATA BOOLEAN (DuctCategory);
+showD 'Показывать B' = DATA BOOLEAN (DuctCategory);
 showLength 'Показывать длину' = DATA BOOLEAN (DuctCategory);
 showShina 'Показывать шину' = DATA BOOLEAN (DuctCategory);
 showArea 'Показывать площадь' = DATA BOOLEAN (DuctCategory);

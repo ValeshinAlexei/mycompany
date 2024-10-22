@@ -46,10 +46,22 @@ ductDimensions1 'D1,A,B мм' (OrderLine l) =
         STRING(ductDimensionA(l)) + ' x ' + STRING(ductDimensionB(l))
     ELSE NULL;
 
-// Дополнительные поля
-ductDimensions2 'D2,C,D мм' = DATA BPSTRING[100] (OrderLine);
+// Определение полей для D1, A и B
+ductDimensionD2 'D2 мм' = DATA NUMERIC[10,0] (OrderLine);
+ductDimensionC 'C мм' = DATA NUMERIC[10,0] (OrderLine);
+ductDimensionD 'D мм' = DATA NUMERIC[10,0] (OrderLine);
+
+// Свойство для представления D1, A, B мм
+ductDimensions2 'D2,С,В мм' (OrderLine l) =
+    IF ductDimensionD1(l) THEN STRING(ductDimensionD1(l))
+    ELSE IF ductDimensionA(l) AND ductDimensionB(l) THEN
+        STRING(ductDimensionA(l)) + ' x ' + STRING(ductDimensionB(l))
+    ELSE NULL;
+
+
+
 ductMaterial 'Материал' = DATA BPSTRING[100] (OrderLine);
-ductThickness 'Толщина материала' = DATA BPSTRING[10] (OrderLine);
+
 ductQuantity 'Количество' = DATA NUMERIC[10,2] (OrderLine);
 
 // Добавляем новое свойство для длины
@@ -90,7 +102,7 @@ FORM order 'Заказ на вентиляционные трубы'
     PROPERTIES(o) number, nameType, date, customer, company, scheduledDate, deliveryAddress, orderEvent READONLY
 
     OBJECTS l = OrderLine
-    PROPERTIES(l) index, categoryName, ductDimensions1, ductDimensions2, ductMaterial, ductThickness,
+    PROPERTIES(l) index, categoryName, ductDimensions1, ductDimensions2, ductMaterial,
         ductQuantity, ductLength,  // Добавлено свойство ductLength между количеством и шиной
         ductShinaLength, ductAngle, ductArea, ductTotalPrice, ductDiscount,
         ductPriceWithDiscount, ductTotalWeight, event READONLY
@@ -126,7 +138,7 @@ FORM orderLine 'Строка заказа на вентиляционные тр
     PROPERTIES READONLY name(c)
     ORDERS name(c)
 
-    PROPERTIES(l) ductDimensionD1, ductDimensionA, ductDimensionB, ductDimensions2, ductMaterial, ductThickness,
+    PROPERTIES(l) ductDimensionD1, ductDimensionA, ductDimensionB, ductDimensionD2, ductDimensionC, ductDimensionD, ductMaterial,
         ductQuantity, ductLength,  // Добавлено свойство ductLength между количеством и шиной
         ductShinaLength, ductArea, ductDiscount, connectionType1, connectionType2, extraRigidity
 
@@ -176,12 +188,13 @@ DESIGN orderLine {
                     MOVE PROPERTY(ductDimensionD1(l)) { showIf = showD1(ductCategory(l)); }
                     MOVE PROPERTY(ductDimensionA(l)) { showIf = showA(ductCategory(l)); }
                     MOVE PROPERTY(ductDimensionB(l)) { showIf = showB(ductCategory(l)); }
-                    MOVE PROPERTY(ductDimensions2(l));
+                    MOVE PROPERTY(ductDimensionD2(l)) { showIf = showD2(ductCategory(l)); }
+                    MOVE PROPERTY(ductDimensionC(l)) { showIf = showC(ductCategory(l)); }
+                    MOVE PROPERTY(ductDimensionD(l)) { showIf = showD(ductCategory(l)); }
                     MOVE PROPERTY(ductQuantity(l));
-                    MOVE PROPERTY(ductLength(l));  // Добавлено свойство ductLength между количеством и шиной
-                    MOVE PROPERTY(ductShinaLength(l));
+                    MOVE PROPERTY(ductLength(l)){ showIf = showLength(ductCategory(l)); };  // Добавлено свойство ductLength между количеством и шиной
+                    MOVE PROPERTY(ductShinaLength(l)){ showIf = showShina(ductCategory(l)); };
                     MOVE PROPERTY(ductMaterial(l));
-                    MOVE PROPERTY(ductThickness(l));
                     MOVE PROPERTY(ductDiscount(l));
                 }
 
