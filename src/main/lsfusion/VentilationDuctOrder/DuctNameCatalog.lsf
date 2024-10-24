@@ -11,6 +11,7 @@ CLASS DuctCategory 'Категория изделия';
 isVisibleInTree 'Отображать в дереве' = DATA BOOLEAN (DuctCategory);  // <--- Вот это свойство
 
 name '{Название}' = DATA ISTRING[50] (DuctCategory) IN id NONULL;
+nameCategory 'Имя категории' (DuctCategory c) = name(c);
 archived 'Архивная' = DATA BOOLEAN (DuctCategory);
 active '{Активная}' (DuctCategory c) = NOT archived(c);
 

@@ -131,38 +131,60 @@ FORM orders 'Заказы на вентиляционные трубы'
 categoryImage '' (OrderLine l) = image(ductCategory(l));
 
 
-// Форма для редактирования строки заказа
+
+
 // Форма для редактирования строки заказа
 FORM orderLine 'Строка заказа на вентиляционные трубы'
     OBJECTS l = OrderLine PANEL
-    TREE ductCategories cc = DuctCategory PARENT parent(cc)
-    PROPERTIES READONLY name(cc)
-    ORDERS name(cc)
+    TREE ductCategories cc = DuctCategory PARENT parent(cc)  // Дерево категорий
+    PROPERTIES READONLY name(cc)  // Отображение имени категории в дереве
+    ORDERS name(cc)  // Сортировка по имени категории
 
+    // Свойства строки заказа
     PROPERTIES(l) ductDimensionD1, ductDimensionA, ductDimensionB, ductDimensionD2, ductDimensionC, ductDimensionD, ductMaterial,
         ductQuantity, ductLength, ductShinaLength, ductArea, ductDiscount, connectionType1, connectionType2, extraRigidity,
         categoryImage
 
+        // Событие изменения категории
     EVENTS ON CHANGE cc {
-        IF cc THEN {
-            ductCategory(l) <- cc;  // Присваиваем выбранную категорию
+        IF cc AND parent(cc) THEN {
+            MESSAGE 'Категория изменена: ' + name(cc);  // Отладочное сообщение при изменении категории
+            ductCategory(l) <- cc;  // Присваиваем выбранную категорию строке заказа
         }
+        ELSE IF cc THEN {
+            MESSAGE 'Выбрана корневая категория: ' + name(cc);
+        }
+        ELSE {
+                MESSAGE 'Категория не выбрана';
+            }
     }
 
     EDIT OrderLine OBJECT l
 
     EVENTS
         ON INIT {
+            MESSAGE 'Форма инициализирована';  // Отладочное сообщение при инициализации формы
             IF currentOrder() THEN {
-                event(l) <- orderEvent(currentOrder());
+                event(l) <- orderEvent(currentOrder());  // Присваиваем событие строке заказа
+                MESSAGE 'Текущее событие присвоено: ' + STRING(event(l));  // Отладочное сообщение для события
             }
+
             // Если категория уже назначена строке заказа
             IF ductCategory(l) THEN {
-                // Выделяем сохранённую категорию в дереве
-                SEEK ductCategories.cc = ductCategory(l);
+                // Разворачиваем дерево на выбранную категорию
+                EXPAND UP orderLine.cc OBJECTS cc = ductCategory(l);  // Разворачиваем все предки выбранной категории
+            }
+            ELSE {
+                MESSAGE 'Категория не назначена строке заказа';
             }
         }
 ;
+
+
+
+
+
+
 
 
 
