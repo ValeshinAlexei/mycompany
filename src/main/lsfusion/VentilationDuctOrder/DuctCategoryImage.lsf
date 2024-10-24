@@ -1,0 +1,44 @@
+MODULE DuctCategoryImage;
+
+REQUIRE DuctNameCatalog;  // Подключаем DuctNameCatalog, чтобы использовать DuctCategory
+
+NAMESPACE Ventilation;
+
+// Свойство для хранения изображения категории изделия
+image 'Изображение' = DATA IMAGEFILE (DuctCategory);
+
+// Действие для загрузки изображения
+loadImage 'Загрузить изображение' (DuctCategory c)  {
+    INPUT = image(c) CHANGE;
+}
+
+// Действие для открытия изображения
+openImage 'Открыть изображение' (DuctCategory c)  {
+    open(image(c));
+}
+
+// Действие для сброса изображения (удаление изображения)
+dropImage 'Удалить изображение' (DuctCategory c) {
+    image(c) <- NULL;
+}
+
+// Расширяем форму редактирования категории изделия для добавления изображений
+EXTEND FORM ductCategory
+    PROPERTIES(c) image, loadImage, openImage, dropImage SHOWIF TRUE IF image(c)  // Добавляем свойства для работы с изображениями
+;
+
+// Дизайн вкладки для изображений
+DESIGN ductCategory {
+    tabs {
+        NEW imageTab {
+            caption = 'Изображение';
+            MOVE PROPERTY(image(c)) { fill = 1; caption = ''; }  // Отображение изображения
+            NEW imageActions {
+                horizontal = TRUE;
+                MOVE PROPERTY(loadImage(c));  // Кнопка загрузки изображения
+                MOVE PROPERTY(openImage(c));  // Кнопка открытия изображения
+                MOVE PROPERTY(dropImage(c));  // Кнопка удаления изображения
+            }
+        }
+    }
+}  

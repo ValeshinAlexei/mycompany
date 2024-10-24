@@ -1,6 +1,6 @@
 MODULE VentilationDuctOrder;
 
-REQUIRE MetaNumerator, VentilationOrderType, DuctNameCatalog, Time, Employee, Company, DateUtils, FileUtils, MetaTax;
+REQUIRE DuctCategoryImage,MetaNumerator, VentilationOrderType, DuctNameCatalog, Time, Employee, Company, DateUtils, FileUtils, MetaTax;
 
 NAMESPACE Ventilation;
 
@@ -46,26 +46,24 @@ ductDimensions1 'D1,A,B мм' (OrderLine l) =
         STRING(ductDimensionA(l)) + ' x ' + STRING(ductDimensionB(l))
     ELSE NULL;
 
-// Определение полей для D1, A и B
+// Определение полей для D2, C и D
 ductDimensionD2 'D2 мм' = DATA NUMERIC[10,0] (OrderLine);
 ductDimensionC 'C мм' = DATA NUMERIC[10,0] (OrderLine);
 ductDimensionD 'D мм' = DATA NUMERIC[10,0] (OrderLine);
 
-// Свойство для представления D1, A, B мм
+// Свойство для представления D2, C, D мм
 ductDimensions2 'D2,С,В мм' (OrderLine l) =
-    IF ductDimensionD1(l) THEN STRING(ductDimensionD1(l))
-    ELSE IF ductDimensionA(l) AND ductDimensionB(l) THEN
-        STRING(ductDimensionA(l)) + ' x ' + STRING(ductDimensionB(l))
+    IF ductDimensionD2(l) THEN STRING(ductDimensionD2(l))
+    ELSE IF ductDimensionC(l) AND ductDimensionB(l) THEN
+        STRING(ductDimensionB(l)) + ' x ' + STRING(ductDimensionB(l))
     ELSE NULL;
-
-
 
 ductMaterial 'Материал' = DATA BPSTRING[100] (OrderLine);
 
 ductQuantity 'Количество' = DATA NUMERIC[10,2] (OrderLine);
 
 // Добавляем новое свойство для длины
-ductLength 'Длина (м)' = DATA NUMERIC[10,2] (OrderLine);  // Новое свойство для длины
+ductLength 'Длина (м)' = DATA NUMERIC[10,2] (OrderLine);
 
 ductShinaLength 'Шина (м)' = DATA NUMERIC[10,2] (OrderLine);
 ductAngle 'УГ шт' = DATA NUMERIC[5,2] (OrderLine);
@@ -103,8 +101,7 @@ FORM order 'Заказ на вентиляционные трубы'
 
     OBJECTS l = OrderLine
     PROPERTIES(l) index, categoryName, ductDimensions1, ductDimensions2, ductMaterial,
-        ductQuantity, ductLength,  // Добавлено свойство ductLength между количеством и шиной
-        ductShinaLength, ductAngle, ductArea, ductTotalPrice, ductDiscount,
+        ductQuantity, ductLength, ductShinaLength, ductAngle, ductArea, ductTotalPrice, ductDiscount,
         ductPriceWithDiscount, ductTotalWeight, event READONLY
     PROPERTIES(l) NESTEDSESSION NEW, DELETE, EDIT
     FILTERS event(l) = orderEvent(o)
@@ -131,31 +128,43 @@ FORM orders 'Заказы на вентиляционные трубы'
     LIST Order OBJECT o
 ;
 
+categoryImage '' (OrderLine l) = image(ductCategory(l));
+
+
+// Форма для редактирования строки заказа
 // Форма для редактирования строки заказа
 FORM orderLine 'Строка заказа на вентиляционные трубы'
     OBJECTS l = OrderLine PANEL
-    TREE categories c = DuctCategory PARENT parent(c)
-    PROPERTIES READONLY name(c)
-    ORDERS name(c)
+    TREE ductCategories cc = DuctCategory PARENT parent(cc)
+    PROPERTIES READONLY name(cc)
+    ORDERS name(cc)
 
     PROPERTIES(l) ductDimensionD1, ductDimensionA, ductDimensionB, ductDimensionD2, ductDimensionC, ductDimensionD, ductMaterial,
-        ductQuantity, ductLength,  // Добавлено свойство ductLength между количеством и шиной
-        ductShinaLength, ductArea, ductDiscount, connectionType1, connectionType2, extraRigidity
+        ductQuantity, ductLength, ductShinaLength, ductArea, ductDiscount, connectionType1, connectionType2, extraRigidity,
+        categoryImage
 
-    EVENTS ON CHANGE c {
-        IF c THEN {
-            ductCategory(l) <- c;
+    EVENTS ON CHANGE cc {
+        IF cc THEN {
+            ductCategory(l) <- cc;  // Присваиваем выбранную категорию
         }
     }
 
     EDIT OrderLine OBJECT l
+
     EVENTS
         ON INIT {
             IF currentOrder() THEN {
                 event(l) <- orderEvent(currentOrder());
             }
+            // Если категория уже назначена строке заказа
+            IF ductCategory(l) THEN {
+                // Выделяем сохранённую категорию в дереве
+                SEEK ductCategories.cc = ductCategory(l);
+            }
         }
 ;
+
+
 
 // Дизайн формы строки заказа
 DESIGN orderLine {
@@ -166,58 +175,111 @@ DESIGN orderLine {
 
             NEW leftPane {
                 fill = 1;
-                width = 200;
+                width = 300;
 
                 NEW categoryBox {
-                    caption = 'Категории';
-                    fill = 1;
-                    MOVE BOX(TREE categories);
+                    caption = 'Тип изделия';
+                    MOVE BOX(TREE ductCategories);  // Исправлено на ductCategories
                 }
             }
 
             NEW centerPane {
-                fill = 3;
-                width = 600;
+                fill = 1;
+                width = 250;
                 horizontal = FALSE;
 
                 NEW propertiesPane {
                     caption = 'Свойства изделия';
                     horizontal = FALSE;
 
-                    // Управляем видимостью свойств через флаги showD1, showA, showB
-                    MOVE PROPERTY(ductDimensionD1(l)) { showIf = showD1(ductCategory(l)); }
-                    MOVE PROPERTY(ductDimensionA(l)) { showIf = showA(ductCategory(l)); }
-                    MOVE PROPERTY(ductDimensionB(l)) { showIf = showB(ductCategory(l)); }
-                    MOVE PROPERTY(ductDimensionD2(l)) { showIf = showD2(ductCategory(l)); }
-                    MOVE PROPERTY(ductDimensionC(l)) { showIf = showC(ductCategory(l)); }
-                    MOVE PROPERTY(ductDimensionD(l)) { showIf = showD(ductCategory(l)); }
-                    MOVE PROPERTY(ductQuantity(l));
-                    MOVE PROPERTY(ductLength(l)){ showIf = showLength(ductCategory(l)); };  // Добавлено свойство ductLength между количеством и шиной
-                    MOVE PROPERTY(ductShinaLength(l)){ showIf = showShina(ductCategory(l)); };
-                    MOVE PROPERTY(ductMaterial(l));
-                    MOVE PROPERTY(ductDiscount(l));
-                }
+                    MOVE PROPERTY(ductDimensionD1(l)) {
+                        showIf = showD1(ductCategory(l));
+                        captionWidth = 80;
+                        valueWidth = 100;
+                    }
+                    MOVE PROPERTY(ductDimensionA(l)) {
+                        showIf = showA(ductCategory(l));
+                        captionWidth = 80;
+                        valueWidth = 100;
+                    }
+                    MOVE PROPERTY(ductDimensionB(l)) {
+                        showIf = showB(ductCategory(l));
+                        captionWidth = 80;
+                        valueWidth = 100;
+                    }
+                    MOVE PROPERTY(ductDimensionD2(l)) {
+                        showIf = showD2(ductCategory(l));
+                        captionWidth = 80;
+                        valueWidth = 100;
+                    }
+                    MOVE PROPERTY(ductDimensionC(l)) {
+                        showIf = showC(ductCategory(l));
+                        captionWidth = 80;
+                        valueWidth = 100;
+                    }
+                    MOVE PROPERTY(ductDimensionD(l)) {
+                        showIf = showD(ductCategory(l));
+                        captionWidth = 80;
+                        valueWidth = 100;
+                    }
+                    MOVE PROPERTY(ductLength(l)) {
+                        showIf = showLength(ductCategory(l));
+                        captionWidth = 80;
+                        valueWidth = 100;
+                    }
+                    MOVE PROPERTY(ductQuantity(l)) {
+                        captionWidth = 80;
+                        valueWidth = 100;
+                    }
+                    MOVE PROPERTY(ductShinaLength(l)) {
+                        showIf = showShina(ductCategory(l));
+                        captionWidth = 80;
+                        valueWidth = 100;
+                    }
+                    MOVE PROPERTY(ductMaterial(l)) {
+                        captionWidth = 80;
+                        valueWidth = 100;
+                    }
+                    MOVE PROPERTY(ductDiscount(l)) {
+                        captionWidth = 80;
+                        valueWidth = 100;
+                    }
+                    MOVE PROPERTY(ductArea(l)) {
+                        captionWidth = 80;
+                        valueWidth = 100;
+                    }
 
-                NEW imagePane {
-                    caption = 'Изображение';
+                }
+            }
+
+            NEW rightPane {
+                fill = 1;
+                width = 300;
+
+                NEW imageBox {
                     horizontal = FALSE;
-                    MOVE PROPERTY(ductArea(l));
+                    size = (200, 180);
+                    caption = 'Изображение изделия';
+                    MOVE PROPERTY(categoryImage(l));
                 }
 
                 NEW connectionsPane {
                     caption = 'Соединения';
                     horizontal = FALSE;
-                    MOVE PROPERTY(connectionType1(l));
-                    MOVE PROPERTY(connectionType2(l));
+                    MOVE PROPERTY(connectionType1(l)) {
+                        captionWidth = 90;
+                        valueWidth = 100;
+                    }
+                    MOVE PROPERTY(connectionType2(l)) {
+                        captionWidth = 90;
+                        valueWidth = 100;
+                    }
                     MOVE PROPERTY(extraRigidity(l));
                 }
             }
         }
     }
 }
-
-
-
 
 // Навигатор — добавление форм списка категорий и заказов в одну вкладку
 NAVIGATOR {

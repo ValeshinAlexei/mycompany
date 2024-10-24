@@ -2,7 +2,7 @@ MODULE DuctNameCatalog;
 
 REQUIRE Hierarchy, MetaNumerator;
 
-NAMESPACE MasterData;
+NAMESPACE Ventilation;
 
 CLASS DuctCategory 'Категория изделия';
 
@@ -94,20 +94,27 @@ newDuctCategory 'Новая категория' (DuctCategory cc) {
 } IMAGE 'add.png' CHANGEKEY 'INSERT' HIDE;
 
 // Форма списка категорий
+// Форма списка категорий
 FORM ductCategories 'Категории изделий'
     OBJECTS c = DuctCategory
     PROPERTIES(c) READONLY name, canonicalNameParent
     PROPERTIES(c) NEWSESSION NEW, EDIT, DELETE
-    FILTERGROUP active
-        FILTER '{Активная}' active(c) 'F8' DEFAULT
-        FILTER 'Архивная' archived(c) 'F7'
 
-    TREE ductCategories cc = DuctCategory PARENT parent(cc)
+    TREE ductCategories cc = DuctCategory PARENT parent(cc)  // Дерево категорий
     PROPERTIES READONLY name(cc)
+
+    // Одна группа фильтров для списка и дерева
+    FILTERGROUP active
+        FILTER '{Активная}' active(c) 'F8' DEFAULT  // Фильтрация активных категорий
+        FILTER 'Архивная' archived(c) 'F7'          // Фильтрация архивных категорий
+        FILTER '{Активная}' active(cc) 'F8'         // Применение тех же фильтров к дереву
+        FILTER 'Архивная' archived(cc) 'F7'
+
     PROPERTIES(cc) NEWSESSION EDIT, DELETE
     PROPERTIES(cc) newDuctCategory DRAW cc TOOLBAR
     LIST DuctCategory OBJECT c
 ;
+
 
 DESIGN ductCategories {
     OBJECTS {
